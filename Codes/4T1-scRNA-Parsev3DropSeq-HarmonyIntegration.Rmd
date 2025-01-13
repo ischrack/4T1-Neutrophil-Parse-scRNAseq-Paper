@@ -9,7 +9,34 @@ READ ME
 Add a description of what this file does later. 
 
 
-```{r}
-
+```{r Load necessary libraries}
+library(harmony)
+library(Seurat)
+library(SeuratDisk)
+library(SeuratWrappers) # after a ton of frustration, I had to install.packages("R.utils")
 ```
+
+
+```{r Load & prepare the pre-compiled datasets}
+# These are the Parse V3 scRNA datasets
+AllTissue <- readRDS("/Users/ianschrack/Desktop/10882-IS/AllTissue.rds")
+AllTissue$dataset <- "Parse"
+
+# These are the DropSeq datasets assembled by Sophia
+load("/Users/ianschrack/Dropbox (University of Michigan)/Research/Projects/Aim 1.2/Orbach_DropSeq/Spleen.robj")
+load("/Users/ianschrack/Dropbox (University of Michigan)/Research/Projects/Aim 1.2/Orbach_DropSeq/lung.robj")
+load("/Users/ianschrack/Dropbox (University of Michigan)/Research/Projects/Aim 1.2/Orbach_DropSeq/scaf.robj")
+
+# Use native merge functions to compile a full DropSeq object
+Dropseq <- merge(lung, y = c(scaf, spleen))
+Dropseq$dataset <- "Dropseq"
+AllTissue <- merge(AllTissue, y = Dropseq)
+```
+
+```{r Pre-Filtering}
+VlnPlot(AllTissue, pt.size = 0, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+FeatureScatter(AllTissue, feature1 = "nCount_RNA", feature2 = "percent.mt")
+FeatureScatter(AllTissue, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+```
+
 

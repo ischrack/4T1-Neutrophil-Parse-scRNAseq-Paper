@@ -9,22 +9,518 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+```{r Clear variable list}
+rm(list=ls()) ### clear variables at the start, so that old variables aren't carried over
 ```
 
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+## Part I: Import & load necessary libraries and data
+```{r Load libraries, echo=FALSE, warning=FALSE}
+library(Seurat)
+library(dplyr)
+library(Matrix)
+library(ggplot2)
+library(SeuratDisk)
+library(scales)
+library(usethis)
+library(CellChat) # For CellChat
+library(ComplexHeatmap) # For CellChat
+library(clusterProfiler)
+library(plotrix)
+library(Hmisc)
+library(reshape2)
+library(monocle3)
+library(SeuratWrappers) # after a ton of frustration, I had to install.packages("R.utils")
+library(RColorBrewer)
+library(ggpubr)
+library(ggbeeswarm)
+library("clusterProfiler")
+library("org.Mm.eg.db")
+library("AnnotationHub")
+library(ggrepel)
+library(UCell)
+library(SCpubr)
+library(msigdbr)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r Load pre-made data}
+AllTissue <- readRDS("/Users/ianschrack/Documents/GitHub/4T1-Neutrophil-Parse-scRNAseq-Paper/Data/ParseDropSeqHarmonyDatasetIntegrate_PreAnnotate.rds")
+```
+
+# Pre-filtered dataset QC 
+```{r Pre-filtered QC metrics & visualizations}
+# Re-order the time point meta data slot
+AllTissue@meta.data$Day <- factor(x = AllTissue@meta.data$Day, levels = c("D0", "D7", "D14", "D21"))
+
+# Notes on Seurat nomenclature
+# nFeature_RNA = # of genes detected per cell
+# nCount_RNA = # of molecules detected per cell
+# percent.mt = % percent mitochondrial DNA per cell which correlates with cell death (i.e. higher % is more dead)
+
+# Calculate % mitochondrial DNA per cell
+AllTissue[["percent.mt"]] <- PercentageFeatureSet(AllTissue, pattern = "^mt-")
+
+# Pre-filtered cell data
+FeatureScatter(AllTissue, feature1 = "nCount_RNA", feature2 = "percent.mt")
+FeatureScatter(AllTissue, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+
+# Features split by day 
+VlnPlot(AllTissue, pt.size = 0, features = "nFeature_RNA", group.by = "Day") + ggtitle("All nFeature_RNA")
+VlnPlot(AllTissue, pt.size = 0, features = "nCount_RNA", group.by = "Day") + ggtitle("All nCount_RNA")
+VlnPlot(AllTissue, pt.size = 0, features = "percent.mt", group.by = "Day") + ggtitle("All percent.mt")
+
+# Features split by day 
+VlnPlot(AllTissue, pt.size = 0, features = "nFeature_RNA", group.by = "Day") + ggtitle("All nFeature_RNA")
+VlnPlot(AllTissue, pt.size = 0, features = "nCount_RNA", group.by = "Day") + ggtitle("All nCount_RNA")
+VlnPlot(AllTissue, pt.size = 0, features = "percent.mt", group.by = "Day") + ggtitle("All percent.mt")
+
+# Features split by tissue 
+VlnPlot(AllTissue, pt.size = 0, features = "nFeature_RNA", group.by = "Tissue") + ggtitle("All nFeature_RNA")
+VlnPlot(AllTissue, pt.size = 0, features = "nCount_RNA", group.by = "Tissue") + ggtitle("All nCount_RNA")
+VlnPlot(AllTissue, pt.size = 0, features = "percent.mt", group.by = "Tissue") + ggtitle("All percent.mt")
+
+# Subset just lung
+temp <- subset(AllTissue, subset = Tissue == "Lung")
+VlnPlot(temp, pt.size = 0, features = "nFeature_RNA", group.by = "Day") + ggtitle("Lung nFeature_RNA")
+VlnPlot(temp, pt.size = 0, features = "nCount_RNA", group.by = "Day") + ggtitle("Lung nCount_RNA")
+VlnPlot(temp, pt.size = 0, features = "percent.mt", group.by = "Day") + ggtitle("Lung percent.mt")
+
+# Subset just scaffold
+temp <- subset(AllTissue, subset = Tissue == "Scaffold")
+VlnPlot(temp, pt.size = 0, features = "nFeature_RNA", group.by = "Day") + ggtitle("Scaffold nFeature_RNA")
+VlnPlot(temp, pt.size = 0, features = "nCount_RNA", group.by = "Day") + ggtitle("Scaffold nCount_RNA")
+VlnPlot(temp, pt.size = 0, features = "percent.mt", group.by = "Day") + ggtitle("Scaffold percent.mt")
+
+# Subset just blood
+temp <- subset(AllTissue, subset = Tissue == "Blood")
+VlnPlot(temp, pt.size = 0, features = "nFeature_RNA", group.by = "Day") + ggtitle("Blood nFeature_RNA")
+VlnPlot(temp, pt.size = 0, features = "nCount_RNA", group.by = "Day") + ggtitle("Blood nCount_RNA")
+VlnPlot(temp, pt.size = 0, features = "percent.mt", group.by = "Day") + ggtitle("Blood percent.mt")
+
+rm(temp)
+```
+
+```{r Pre-filtered cell count by tissue, day, and replicate}
+print("Lung Pre-Filter")
+temp <- subset(AllTissue, subset = Tissue == "Lung")
+addmargins(table(temp@meta.data$Replicate, temp@meta.data$Day))
+
+print("Scaffold Pre-Filter")
+temp <- subset(AllTissue, subset = Tissue == "Scaffold")
+addmargins(table(temp@meta.data$Replicate, temp@meta.data$Day))
+
+print("Blood Pre-Filter")
+temp <- subset(AllTissue, subset = Tissue == "Blood")
+addmargins(table(temp@meta.data$Replicate, temp@meta.data$Day))
+
+rm(temp)
+```
+
+# Filtering
+```{r Filter cells, echo=FALSE}
+# Perform the filtering (Seurat uses nFeature_RNA > 200 & nFeature_RNA < 2500 & percent.mt < 5))
+AllTissue <- subset(AllTissue, subset = nFeature_RNA < 5000 & nCount_RNA < 20000 & percent.mt < 15)
+
+```
+
+
+# Post-filtered dataset QC 
+```{r Post-filtered QC metrics & visualizations}
+# Post-Filtering
+FeatureScatter(AllTissue, feature1 = "nCount_RNA", feature2 = "percent.mt")
+FeatureScatter(AllTissue, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+
+# Features split by day 
+VlnPlot(AllTissue, pt.size = 0, features = "nFeature_RNA", group.by = "Day") + ggtitle("All nFeature_RNA")
+VlnPlot(AllTissue, pt.size = 0, features = "nCount_RNA", group.by = "Day") + ggtitle("All nCount_RNA")
+VlnPlot(AllTissue, pt.size = 0, features = "percent.mt", group.by = "Day") + ggtitle("All percent.mt")
+
+# Features split by tissue 
+VlnPlot(AllTissue, pt.size = 0, features = "nFeature_RNA", group.by = "Tissue") + ggtitle("All nFeature_RNA")
+VlnPlot(AllTissue, pt.size = 0, features = "nCount_RNA", group.by = "Tissue") + ggtitle("All nCount_RNA")
+VlnPlot(AllTissue, pt.size = 0, features = "percent.mt", group.by = "Tissue") + ggtitle("All percent.mt")
+
+# Subset just lung
+temp <- subset(AllTissue, subset = Tissue == "Lung")
+VlnPlot(temp, pt.size = 0, features = "nFeature_RNA", group.by = "Day") + ggtitle("Lung nFeature_RNA")
+VlnPlot(temp, pt.size = 0, features = "nCount_RNA", group.by = "Day") + ggtitle("Lung nCount_RNA")
+VlnPlot(temp, pt.size = 0, features = "percent.mt", group.by = "Day") + ggtitle("Lung percent.mt")
+
+# Subset just scaffold
+temp <- subset(AllTissue, subset = Tissue == "Scaffold")
+VlnPlot(temp, pt.size = 0, features = "nFeature_RNA", group.by = "Day") + ggtitle("Scaffold nFeature_RNA")
+VlnPlot(temp, pt.size = 0, features = "nCount_RNA", group.by = "Day") + ggtitle("Scaffold nCount_RNA")
+VlnPlot(temp, pt.size = 0, features = "percent.mt", group.by = "Day") + ggtitle("Scaffold percent.mt")
+
+# Subset just lung
+temp <- subset(AllTissue, subset = Tissue == "Blood")
+VlnPlot(temp, pt.size = 0, features = "nFeature_RNA", group.by = "Day") + ggtitle("Blood nFeature_RNA")
+VlnPlot(temp, pt.size = 0, features = "nCount_RNA", group.by = "Day") + ggtitle("Blood nCount_RNA")
+VlnPlot(temp, pt.size = 0, features = "percent.mt", group.by = "Day") + ggtitle("Blood percent.mt")
+
+rm(temp)
+```
+
+```{r Post-filtered cell count by tissue, day, and replicate}
+print("Lung Post-Filter")
+temp <- subset(AllTissue, subset = Tissue == "Lung")
+addmargins(table(temp@meta.data$Replicate, temp@meta.data$Day))
+
+print("Scaffold Post-Filter")
+temp <- subset(AllTissue, subset = Tissue == "Scaffold")
+addmargins(table(temp@meta.data$Replicate, temp@meta.data$Day))
+
+print("Blood Post-Filter")
+temp <- subset(AllTissue, subset = Tissue == "Blood")
+addmargins(table(temp@meta.data$Replicate, temp@meta.data$Day))
+
+rm(temp)
+```
+# Check integrated data
+```{r Clustering & dimensional reduction}
+dims = 40
+AllTissue <- FindNeighbors(AllTissue, reduction = "harmony", dims = 1:dims, verbose = FALSE)
+AllTissue <- FindClusters(AllTissue, resolution = 1, verbose = FALSE, algorithm = 2, method = "igraph")
+AllTissue <- RunUMAP(AllTissue, dims = 1:dims, reduction = "harmony", verbose = FALSE, min.dist = 0.5, spread = 0.5)
+rm(dims)
+```
+
+```{r UMAP visualizations}
+DimPlot(AllTissue, reduction = "umap", label = T)
+DimPlot(AllTissue, reduction = "umap", group.by = c("Tissue", "seurat_clusters"))
+DimPlot(AllTissue, reduction = "umap", split.by = "Tissue", label = TRUE)
+```
+
+# Cluster analysis & annotation
+```{r Differential gene expression (finding cluster markers)}
+AllTissue <- JoinLayers(AllTissue)
+
+AllTissue_markers <- FindAllMarkers(AllTissue, min.pct = 0.25, logfc.threshold = 0.25)
+AllTissue_markers %>% group_by(cluster) %>% top_n(n = 2, wt = avg_log2FC)
+```
+
+```{r Rename Clusters}
+AllTissue <- RenameIdents(AllTissue, "0" = "Monocyte") # Could be something else. Previously labeled Myeloid.
+AllTissue <- RenameIdents(AllTissue, "1" = "Neutrophils")
+AllTissue <- RenameIdents(AllTissue, "2" = "Neutrophils")
+AllTissue <- RenameIdents(AllTissue, "3" = "B Cells")
+AllTissue <- RenameIdents(AllTissue, "4" = "Macrophage")
+AllTissue <- RenameIdents(AllTissue, "5" = "Monocyte")
+AllTissue <- RenameIdents(AllTissue, "6" = "Macrophage")
+AllTissue <- RenameIdents(AllTissue, "7" = "Neutrophils")
+AllTissue <- RenameIdents(AllTissue, "8" = "NK Cells")
+AllTissue <- RenameIdents(AllTissue, "9" = "T Cells")
+AllTissue <- RenameIdents(AllTissue, "10" = "ECs")
+AllTissue <- RenameIdents(AllTissue, "11" = "T Cells")
+AllTissue <- RenameIdents(AllTissue, "12" = "T Cells")
+AllTissue <- RenameIdents(AllTissue, "13" = "Eosinophils")
+AllTissue <- RenameIdents(AllTissue, "14" = "DC")
+AllTissue <- RenameIdents(AllTissue, "15" = "Fibroblasts")
+AllTissue <- RenameIdents(AllTissue, "16" = "pDC")
+AllTissue <- RenameIdents(AllTissue, "17" = "T Cells")
+AllTissue <- RenameIdents(AllTissue, "18" = "Neutrophils")
+AllTissue <- RenameIdents(AllTissue, "19" = "Monocyte")
+AllTissue <- RenameIdents(AllTissue, "20" = "Prolif_Monocyte")
+AllTissue <- RenameIdents(AllTissue, "21" = "Basophils")
+AllTissue <- RenameIdents(AllTissue, "22" = "Neutrophils")
+AllTissue <- RenameIdents(AllTissue, "23" = "Monocyte") # Could be something else. Previously labeled Myeloid.
+AllTissue <- RenameIdents(AllTissue, "24" = "Unknown")
+AllTissue <- RenameIdents(AllTissue, "25" = "Unknown")
+AllTissue <- RenameIdents(AllTissue, "26" = "B Cells")
+AllTissue <- RenameIdents(AllTissue, "27" = "Unknown")
+
+# Create a meta data slot with cell types
+AllTissue@meta.data$CellType <- Idents(AllTissue)
+
+# Remove Unknown Cells
+AllTissue <- subset(AllTissue, subset = CellType %in% 
+                      c("Neutrophils", "Monocyte", "Prolif_Monocyte", "Macrophage", 
+                        "DC", "pDC", "Basophils", "Eosinophils", "B Cells", 
+                        "T Cells", "NK Cells", "ECs", "Fibroblasts"))
+
+# Reorder cells
+AllTissue@meta.data$CellType <- factor(AllTissue@meta.data$CellType, levels = c("Neutrophils", "Monocyte", "Prolif_Monocyte", "Macrophage", 
+                                                        "DC", "pDC", "Basophils", "Eosinophils", "B Cells", 
+                                                        "T Cells", "NK Cells", "ECs", "Fibroblasts"))
+
+# Re-order the time point meta data slot
+AllTissue$Day <- factor(AllTissue$Day, levels = c("D0", "D7","D14", "D21"))
+
+# Defines the active ident slot as cell types
+Idents(AllTissue) <- factor(AllTissue@meta.data$CellType)
+```
+
+```{r Dotplot of cluster-defining genes}
+cell.genes = c("Ptprc", "Itgam", "Fn1", "Fcgr3",
+                                "S100a8", "S100a9", "Csf3r", "Il1r2", "Il1b",
+                                "Ly6c", "Cd68", 
+                                "Psap", "Apoe", "Apobec1", "Csf1r",
+                                "Mki67", "Top2a",
+                                "Htr7", "Flt3", "H2-Ab1", "H2-Aa",
+                                "Siglech", "Bst2", "Klk1", 
+                                "Gata2", "Cpa3", "Ms4a2", "Itga2b", 
+                                "Siglecf", "Ear1", "Ear2", 
+                                "Cd19", "Pax5",
+                                "Ccr7", "Cd3e", "Cd3g", "Itk", "Tox", "Cd28", 
+                                "Egfl7", "Flt1", "Kdr", 
+                                "Col1a1", "Col3a1", "Col1a2")
+
+
+# Plot size (WxH): 1000 x 450
+DotPlot(AllTissue, features = cell.genes, 
+        col.min = -1, col.max = 1) + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) + 
+  scale_colour_gradient2(low = muted("blue"), mid = "white", high = muted("red"), 
+                         midpoint = 0, limits=c(-2,2), oob = scales::squish) + 
+    theme(
+    panel.grid.major = element_line(size = 0.5, linetype = 'solid', colour = "gray"), # Adjust major grid lines
+    panel.grid.minor = element_blank(), # Hide minor grid lines if not needed
+    panel.background = element_blank(), # Remove background panel (optional)
+    panel.border = element_rect(colour = "black", fill=NA, size=1), # Add border around the plot (optional)
+    legend.position="none", axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)
+    ) + ylab("") + xlab("")
+
+
+rm(cell.genes)
+
+```
+
+```{r UMAP with annotated clusters}
+# Plot size (WxH): 500 x 450
+DimPlot(AllTissue, reduction = "umap", label = T)
+# Plot size (WxH): 500 x 450
+DimPlot(AllTissue, reduction = "umap", group.by = "Tissue")
+
+# Plot size (WxH): 500 x 450
+DimPlot(AllTissue, reduction = "umap", group.by = "dataset") + ggtitle(NULL)
+
+# Plot size (WxH): 1200 x 450
+DimPlot(AllTissue, reduction = "umap", split.by =  "Tissue")
+
+# Plot size (WxH): 1200 x 450
+DimPlot(AllTissue, reduction = "umap", split.by =  "Day")
+```
+
+```{r Count table by cell type & day}
+addmargins(table(AllTissue@meta.data$CellType, AllTissue@meta.data$Day))
+```
+
+```{r Count table per tissue by cell type & day}
+print("Lung Post-Filter")
+temp <- subset(AllTissue, subset = Tissue == "Lung")
+addmargins(table(temp@meta.data$CellType, temp@meta.data$Day))
+
+print("Scaffold Post-Filter")
+temp <- subset(AllTissue, subset = Tissue == "Scaffold")
+addmargins(table(temp@meta.data$CellType, temp@meta.data$Day))
+
+print("Blood Post-Filter")
+temp <- subset(AllTissue, subset = Tissue == "Blood")
+addmargins(table(temp@meta.data$CellType, temp@meta.data$Day))
+
+print("Spleen Post-Filter")
+temp <- subset(AllTissue, subset = Tissue == "Spleen")
+addmargins(table(temp@meta.data$CellType, temp@meta.data$Day))
+
+rm(temp)
+```
+
+```{r Stacked barchart of AllTissue by celltype}
+Fallback_AllTissue <- AllTissue
+
+# Lung Stacked Barchart
+temp1 <- subset(AllTissue, subset = Tissue == "Lung")
+temp2 <- data.frame(table(temp1@meta.data$CellType, temp1$Day))
+
+temp2 <- temp2 %>% dplyr::rename(CellType = Var1, Day = Var2) %>% 
+  dplyr::group_by(Day) %>% 
+  dplyr::mutate(Percent = Freq / sum(Freq)*100)
+
+# Plot size (WxH): 600 x 500
+SB_lung <- ggplot(temp2, aes(x = Day, y = Percent, fill = CellType)) + 
+              geom_bar(stat = "identity", colour = "black") + 
+              theme(text = element_text(size = 20, colour = "black"),
+                    axis.text.x = element_text(size = 20, colour = "black"),
+                    axis.text.y = element_text(size = 20, colour = "black"),
+                    axis.line.x = element_blank(),
+                    axis.ticks.x = element_blank(),
+                    axis.line.y = element_line(size = 1, colour = "black", linetype=1),
+                    axis.ticks.length.y = unit(0.25, "cm"),
+                    axis.ticks.y = element_line(size = 1, colour = "black"),
+                    plot.background = element_rect(fill = "transparent", colour = NA_character_), 
+                    panel.background = element_rect(fill = "transparent", colour = NA_character_)) +
+              scale_y_continuous(breaks = seq(0, 100, 20), limits = c(0,100.00001), expand = c(0, 0))
+
+# Scaffold Stacked Barchart
+temp1 <- subset(AllTissue, subset = Tissue == "Scaffold")
+temp2 <- data.frame(table(temp1@meta.data$CellType, temp1$Day))
+
+temp2 <- temp2 %>% dplyr::rename(CellType = Var1, Day = Var2) %>% 
+  dplyr::group_by(Day) %>% 
+  dplyr::mutate(Percent = Freq / sum(Freq)*100)
+
+# Plot size (WxH): 600 x 500
+SB_scaf <- ggplot(temp2, aes(x = Day, y = Percent, fill = CellType)) + 
+                geom_bar(stat = "identity", colour = "black") + 
+                theme(text = element_text(size = 20, colour = "black"),
+                      axis.text.x = element_text(size = 20, colour = "black"),
+                      axis.text.y = element_text(size = 20, colour = "black"),
+                      axis.line.x = element_blank(),
+                      axis.ticks.x = element_blank(),
+                      axis.line.y = element_line(size = 1, colour = "black", linetype=1),
+                      axis.ticks.length.y = unit(0.25, "cm"),
+                      axis.ticks.y = element_line(size = 1, colour = "black"),
+                      plot.background = element_rect(fill = "transparent", colour = NA_character_), 
+                      panel.background = element_rect(fill = "transparent", colour = NA_character_)) +
+                scale_y_continuous(breaks = seq(0, 100, 20), limits = c(0,100.00001), expand = c(0, 0))
+
+# Spleen Stacked Barchart
+temp1 <- subset(AllTissue, subset = Tissue == "Spleen")
+temp2 <- data.frame(table(temp1@meta.data$CellType, temp1$Day))
+
+temp2 <- temp2 %>% dplyr::rename(CellType = Var1, Day = Var2) %>% 
+  dplyr::group_by(Day) %>% 
+  dplyr::mutate(Percent = Freq / sum(Freq)*100)
+
+# Plot size (WxH): 600 x 500
+SB_spleen <- ggplot(temp2, aes(x = Day, y = Percent, fill = CellType)) + 
+                geom_bar(stat = "identity", colour = "black") + 
+                theme(text = element_text(size = 20, colour = "black"),
+                      axis.text.x = element_text(size = 20, colour = "black"),
+                      axis.text.y = element_text(size = 20, colour = "black"),
+                      axis.line.x = element_blank(),
+                      axis.ticks.x = element_blank(),
+                      axis.line.y = element_line(size = 1, colour = "black", linetype=1),
+                      axis.ticks.length.y = unit(0.25, "cm"),
+                      axis.ticks.y = element_line(size = 1, colour = "black"),
+                      plot.background = element_rect(fill = "transparent", colour = NA_character_), 
+                      panel.background = element_rect(fill = "transparent", colour = NA_character_)) +
+                scale_y_continuous(breaks = seq(0, 100, 20), limits = c(0,100.00001), expand = c(0, 0))
+
+# Plot size (WxH): 1000 x 600
+SB_spleen + theme(legend.position = "none", axis.title.x = element_blank()) + 
+  SB_lung + theme(legend.position = "bottom", legend.title = element_blank(), axis.title.y = element_blank()) + 
+  SB_scaf + theme(axis.title.y = element_blank(), axis.title.x = element_blank(), legend.position = "none")
+
+rm(temp1, temp2)
+
+AllTissue <- Fallback_AllTissue
+rm(Fallback_AllTissue)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

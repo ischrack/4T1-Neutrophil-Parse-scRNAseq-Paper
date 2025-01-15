@@ -408,10 +408,92 @@ AllTissue <- Fallback_AllTissue
 rm(Fallback_AllTissue)
 ```
 
+```{r AllTissue Cell cycle scoring}
+AllTissue <- CellCycleScoring(AllTissue, 
+                           g2m.features = cc.genes$g2m.genes, 
+                           s.features = cc.genes$s.genes, 
+                           set.ident = TRUE)
+
+FeaturePlot(AllTissue, features = "S.Score", reduction = "umap") +
+  scale_color_gradientn(colours = c('lightgrey', 'blue'),  limits = c(0, 1))
+
+FeaturePlot(AllTissue, features = "G2M.Score", reduction = "umap") +
+  scale_color_gradientn(colours = c('lightgrey', 'blue'),  limits = c(0, 1))
+
+AllTissue <- SetIdent(AllTissue, value = AllTissue@meta.data$CellType)
+```
+
+# Neutrophil subset & processing
+```{r Neutrophil pre-processing}
+Neuts <- subset(AllTissue, subset = CellType %in% c("Neutrophils"))
+Neuts <- FindVariableFeatures(Neuts, selection.method = "vst", nfeatures = 2000)
+
+# Identify the 10 most highly variable genes
+top10 <- head(VariableFeatures(Neuts), 10)
+VariableFeaturePlot(Neuts)
+rm(top10)
+
+# Scale Data
+all.genes_Neuts <- rownames(Neuts)
+
+# Adjust computer settings for efficient calculations
+options(future.globals.maxSize = 8000*1024^2)
+future::plan("multisession", workers = 8) # do parallel
+
+Neuts <- ScaleData(Neuts)
+Neuts <- RunPCA(Neuts, features = VariableFeatures(object = Neuts))
+Neuts <- FindNeighbors(Neuts, dims = 1:30, reduction = "harmony")
+Neuts <- FindClusters(Neuts, resolution = 0.4, algorithm = 1, verbose = TRUE)
+Neuts <- RunUMAP(Neuts, dims = 1:30, reduction = "harmony",  min.dist = 0.4, spread = 0.5, n.neighbors = 5)
+```
+
+```{r Neutrophil UMAP visualizations}
+
+# Plot size (WxH): 500 x 450
+DimPlot(Neuts, reduction = "umap", label = T)
+# Plot size (WxH): 1200 x 400
+DimPlot(Neuts, reduction = "umap", group.by = "Tissue")
+# Plot size (WxH): 1200 x 400
+DimPlot(Neuts, reduction = "umap", group.by = "Day")
+# Plot size (WxH): 500 x 450
+DimPlot(Neuts, reduction = "umap", group.by = "dataset")
 
 
+# Plot size (WxH): 1200 x 400
+par(mfrow = c(1,2), xpd=TRUE)
+g1 <- DimPlot(subset(Neuts, subset = Day %in% c("D0, D7", "D14")), reduction = "umap", label = T)
+g2 <- DimPlot(subset(Neuts, subset = Day %in% c("D21")), reduction = "umap", label = T)
+g1 + g2
+rm(g1, g2)
+par(mfrow = c(1,1), xpd=TRUE)
 
+DimPlot(subset(Neuts, subset = dataset == "Dropseq"), group.by = "Day", reduction = "umap")
 
+# Lung Stacked Barchart
+temp1 <- subset(Neuts, subset = Tissue == "Lung")
+temp2 <- data.frame(table(temp1@meta.data$seurat_clusters, temp1$Day))
+
+temp2 <- temp2 %>% dplyr::rename(seurat_clusters = Var1, Day = Var2) %>% 
+  dplyr::group_by(Day) %>% 
+  dplyr::mutate(Percent = Freq / sum(Freq)*100)
+
+# Plot size (WxH): 600 x 500
+ggplot(temp2, aes(x = Day, y = Percent, fill = seurat_clusters)) + 
+  geom_bar(stat = "identity", colour = "black") + 
+  theme(text = element_text(size = 20, colour = "black"),
+        axis.text.x = element_text(size = 20, colour = "black"),
+        axis.text.y = element_text(size = 20, colour = "black"),
+        axis.line.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.line.y = element_line(size = 1, colour = "black", linetype=1),
+        axis.ticks.length.y = unit(0.25, "cm"),
+        axis.ticks.y = element_line(size = 1, colour = "black"),
+        plot.background = element_rect(fill = "transparent", colour = NA_character_), 
+        panel.background = element_rect(fill = "transparent", colour = NA_character_)) +
+  scale_y_continuous(breaks = seq(0, 100, 20), limits = c(0,100.00001), expand = c(0, 0)) +
+  labs(title = "Lung")
+rm(temp1, temp2)
+```
 
 
 

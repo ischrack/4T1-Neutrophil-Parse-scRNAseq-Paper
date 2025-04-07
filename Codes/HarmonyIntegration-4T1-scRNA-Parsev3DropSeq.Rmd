@@ -9,7 +9,7 @@ READ ME
 Add a description of what this file does later. 
 
 
-```{r Load necessary libraries}
+```{r Load necessary libraries, message=FALSE, warning=FALSE}
 library(harmony)
 library(Seurat)
 library(SeuratDisk)
@@ -22,7 +22,7 @@ library(SeuratWrappers) # after a ton of frustration, I had to install.packages(
 AllTissue <- readRDS("/Users/ianschrack/Documents/GitHub/4T1-Neutrophil-Parse-scRNAseq-Paper/Data/AllTissue_ParseV3.rds")
 AllTissue$dataset <- "Parse"
 
-# These are the DropSeq datasets assembled by Sophia
+# These are the DropSeq datasets assembled by Sophia Orbach, PhD
 load("/Users/ianschrack/Documents/GitHub/4T1-Neutrophil-Parse-scRNAseq-Paper/Data/Spleen_DropSeq.robj")
 load("/Users/ianschrack/Documents/GitHub/4T1-Neutrophil-Parse-scRNAseq-Paper/Data/Lung_DropSeq.robj")
 load("/Users/ianschrack/Documents/GitHub/4T1-Neutrophil-Parse-scRNAseq-Paper/Data/Scaffold_DropSeq.robj")
@@ -36,101 +36,161 @@ AllTissue <- merge(AllTissue, y = Dropseq)
 ```
 
 ```{r Pre-Filtering}
-VlnPlot(AllTissue, pt.size = 0, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+# Generate violin plots for key quality control (QC) metrics:
+# - nFeature_RNA: Number of detected genes per cell.
+# - nCount_RNA: Total counts of RNA molecules per cell.
+# - percent.mt: Percentage of counts attributed to mitochondrial genes.
+# The plots help identify potential outlier cells or technical artifacts.
+
+# Violin plots: gene counts, RNA counts, and mitochondrial percentage.
+VlnPlot(AllTissue, pt.size = 0, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3, group.by = "dataset")
+
+# Scatter plot: RNA counts vs. mitochondrial percentage.
 FeatureScatter(AllTissue, feature1 = "nCount_RNA", feature2 = "percent.mt")
+
+# Scatter plot: RNA counts vs. number of detected genes.
 FeatureScatter(AllTissue, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
 ```
 
-```{r Clean up meta data}
+In this section, we standardize tissue names for consistency, convert time points into day labels, and remove extraneous metadata columns from the AllTissue object. These steps ensure that the metadata is uniform and ready for subsequent analyses.
+```{r Clean metadata}
+# Standardize tissue names for consistent capitalization.
 AllTissue@meta.data$Tissue[AllTissue@meta.data$Tissue == "lung"] <- "Lung"
 AllTissue@meta.data$Tissue[AllTissue@meta.data$Tissue == "scaffold"] <- "Scaffold"
 AllTissue@meta.data$Tissue[AllTissue@meta.data$Tissue == "spleen"] <- "Spleen"
 
+# Convert 'Time' values into 'Day' labels, then remove the original 'Time' column.
 AllTissue@meta.data$Day[AllTissue@meta.data$Time == "0"] <- "D0"
 AllTissue@meta.data$Day[AllTissue@meta.data$Time == "7"] <- "D7"
 AllTissue@meta.data$Day[AllTissue@meta.data$Time == "14"] <- "D14"
 AllTissue@meta.data$Day[AllTissue@meta.data$Time == "21"] <- "D21"
 AllTissue@meta.data$Time <- NULL
 
+# Assign a replicate label for entries from the Dropseq dataset.
 AllTissue@meta.data$Replicate[AllTissue@meta.data$dataset == "Dropseq"] <- "R5"
 
+# Remove extraneous metadata columns not required for analysis.
 AllTissue@meta.data$Experiment <- NULL
 AllTissue@meta.data$basic <- NULL
 AllTissue@meta.data$EVERYTHING <- NULL
 AllTissue@meta.data$phenotype <- NULL
 ```
 
-
+This section summarizes cell counts for each tissue type before filtering. For each tissue (Lung, Scaffold, and Blood), we subset the AllTissue object, create a contingency table of cell counts by replicate and day, and add margins to display row and column totals. This helps assess the distribution of cells across samples prior to further analysis.
 ```{r Cell counts}
+# Print and summarize cell counts for Lung tissue.
 print("Lung Pre-Filter")
 temp <- subset(AllTissue, subset = Tissue == "Lung")
+
+# Create a table of cell counts by replicate and day, then add margins (totals).
 addmargins(table(temp@meta.data$Replicate, temp@meta.data$Day))
 
+# Print and summarize cell counts for Scaffold tissue.
 print("Scaffold Pre-Filter")
 temp <- subset(AllTissue, subset = Tissue == "Scaffold")
 addmargins(table(temp@meta.data$Replicate, temp@meta.data$Day))
 
+# Print and summarize cell counts for Blood tissue.
 print("Blood Pre-Filter")
 temp <- subset(AllTissue, subset = Tissue == "Blood")
 addmargins(table(temp@meta.data$Replicate, temp@meta.data$Day))
+
+# Remove the temporary variable to free memory.
+rm(temp)
 ```
 
-```{r}
-# Perform the filtering (Seurat uses nFeature_RNA > 200 & nFeature_RNA < 2500 & percent.mt < 5))
+In this section, we filter out low-quality cells based on QC metrics, integrate the assay layers, and prepare the data for downstream analysis. We normalize, identify variable features, scale, reduce dimensionality via PCA, construct a neighbor graph, cluster cells, and finally visualize the data using UMAP.
+```{r Filtering and integration}
+# Filter cells based on QC metrics:
+# - nFeature_RNA: Cells with fewer than 5000 detected genes.
+# - nCount_RNA: Cells with total RNA counts below 20000.
+# - percent.mt: Cells with mitochondrial gene percentage below 15.
 AllTissue <- subset(AllTissue, subset = nFeature_RNA < 5000 & nCount_RNA < 20000 & percent.mt < 15)
 
+# Check current assay layers (expecting split layers such as data.1, counts.1, etc.).
 Layers(AllTissue)
-# "data.1"       "data.2"       "counts.1"     "scale.data.1" "counts.2"  
 
-# Layers were split so we need to join them
+# Merge split layers into a unified assay.
 AllTissue <- JoinLayers(AllTissue)
 
-# Keep just the counts and data layers
+# Verify layers after joining.
 Layers(AllTissue)
+
+# Remove unnecessary scaling layers to retain only the counts and data layers.
 AllTissue[["RNA"]]$scale.data.1 <- NULL
 AllTissue[["RNA"]]$scale.data <- NULL
+
+# Confirm the remaining layers.
 Layers(AllTissue)
 
-# Split layers based on sequencing technology
+# Split the RNA assay layers based on sequencing technology (dataset origin).
 AllTissue[["RNA"]] <- split(AllTissue[["RNA"]], f = AllTissue$dataset)
 
-options(future.globals.maxSize = 8000*1024^2)
-future::plan("multisession", workers = 4) # do parallel
+# Increase future global size limit and configure parallel processing (4 workers).
+options(future.globals.maxSize = 8000 * 1024^2)
+future::plan("multisession", workers = 4)
+
+# Normalize the data using log normalization.
 AllTissue <- NormalizeData(AllTissue, normalization.method = "LogNormalize", scale.factor = 10000)
+
+# Identify 2000 variable features using the 'vst' method.
 AllTissue <- FindVariableFeatures(AllTissue, selection.method = "vst", nfeatures = 2000)
+
+# Scale the data.
 AllTissue <- ScaleData(AllTissue)
+
+# Run PCA for dimensionality reduction.
 AllTissue <- RunPCA(AllTissue)
 
+# Build a nearest-neighbor graph using the first 40 principal components.
 AllTissue <- FindNeighbors(AllTissue, dims = 1:40)
-AllTissue <- FindClusters(AllTissue, resolution = 0.5, cluster.name  = "unintegrated_clusters")
+
+# Cluster cells at a resolution of 0.5; store clusters as "unintegrated_clusters".
+AllTissue <- FindClusters(AllTissue, resolution = 0.5, cluster.name = "unintegrated_clusters")
+
+# Run UMAP using the first 40 PCs for visualization; name the reduction "umap.unintegrated".
 AllTissue <- RunUMAP(AllTissue, dims = 1:40, reduction.name = "umap.unintegrated")
 
+# Visualize UMAP embeddings with cluster labels.
 DimPlot(AllTissue, reduction = "umap.unintegrated", label = TRUE)
+
+# Visualize UMAP embeddings grouped by sequencing technology.
 DimPlot(AllTissue, reduction = "umap.unintegrated", group.by = "dataset")
 ```
 
+```{r Integrate the data, message=FALSE, warning=FALSE}
+# Increase the maximum size for global variables to support parallel processing.
+options(future.globals.maxSize = 24000 * 1024^2)
 
-```{r Integrate the data}
-# Set the globals to make processing quicker
-options(future.globals.maxSize = 24000*1024^2)
-future::plan("multisession", workers = 8) # do parallel
+# Set up parallel processing using 8 workers.
+future::plan("multisession", workers = 8)
 
-# Run Harmony-based integration
+# Integrate the data using Harmony, leveraging the 'dataset', 'Tissue', and 'Day' metadata.
 AllTissue <- RunHarmony(AllTissue, c("dataset", "Tissue", "Day"))
 
+# Rejoin the RNA layers after integration.
 AllTissue[["RNA"]] <- JoinLayers(AllTissue[["RNA"]])
 ```
+
 
 ```{r Save integrated dataset}
 saveRDS(AllTissue, 
         file = "/Users/ianschrack/Documents/GitHub/4T1-Neutrophil-Parse-scRNAseq-Paper/Data/ParseDropSeqHarmonyDatasetIntegrate_PreAnnotate.rds")
 ```
 
-```{r Verify integrated dataset}
+```{r Integrate the data, message=FALSE, warning=FALSE}
+# Compute the nearest-neighbor graph using the integrated 'harmony' reduction (first 40 dimensions).
 AllTissue <- FindNeighbors(AllTissue, reduction = "harmony", dims = 1:40, verbose = FALSE)
+
+# Cluster cells using the graph, with a resolution of 1.
+# 'algorithm = 2' and 'method = "igraph"' specify the clustering strategy.
 AllTissue <- FindClusters(AllTissue, resolution = 1, verbose = FALSE, algorithm = 2, method = "igraph")
+
+# Run UMAP on the integrated data to generate a 2D visualization.
+# Adjust 'min.dist' and 'spread' to control the embedding's compactness.
 AllTissue <- RunUMAP(AllTissue, dims = 1:40, reduction = "harmony", verbose = FALSE, min.dist = 0.5, spread = 0.5)
 
+# Visualize the UMAP embedding, coloring cells by their dataset origin.
 DimPlot(AllTissue, reduction = "umap", group.by = "dataset")
 ```
 

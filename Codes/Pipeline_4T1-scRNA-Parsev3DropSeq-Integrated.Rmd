@@ -448,7 +448,7 @@ top10 <- head(VariableFeatures(Neuts), 10)
 VariableFeaturePlot(Neuts)
 rm(top10)
 
-# Store all gene names for potential downstream analysis.
+# Store all gene names for downstream analysis.
 all.genes_Neuts <- data.frame(rownames(Neuts))
 
 # Adjust settings for efficient parallel processing.
@@ -495,7 +495,85 @@ DimPlot(Neuts, reduction = "umap", group.by = "dataset")
 Neutrophil Marker Dotplot & UMAP Visualizations Pre-Annotation
 In this section, we generate a dot plot to display the expression of selected marker genes used for cluster annotation. The plot uses a customized color gradient and theme adjustments for clarity.
 
+Marker genes were derived from the following publication:
+Grieshaber-Bouyer, R., Radtke, F.A., Cunin, P. et al. The neutrotime transcriptional signature defines a single continuum of neutrophils across biological compartments. Nat Commun 12, 2856 (2021). https://doi.org/10.1038/s41467-021-22973-9
+
+
 ```{r Neutrophil Marker Dotplot & UMAP Visualizations Pre-Annotation, warning=FALSE, message=FALSE}
+# Define marker genes in reversed order for plotting.
+Neut_features <- rev(c(
+  "Rps27", "Ptma", "Hmgb1", "Cebpe", "H2afz", "Tubb5", "Ube2c", "Stmn1", "Calm2", "Tuba1b", 
+  "Gm5483", "Hmgn2", "Hmgb2", "Serpinb1a", "Dstn", "Arhgdib", "Ngp", "Pglyrp1", "Cybb", "Cd177",  
+  "Lyz2", "Ifitm6", "Anxa1", "Camp", "Lcn2", "Ltf", "Ly6c2", "Ly6g",                             
+  "Prdx5", "Lgals3", "Prr13", "Mmp9", "Mgst1", "mt-Co1", "Mmp8", "Retnlg", "S100a6",               
+  "Wfdc17", "Ifitm2", "Ifitm1", "Il1b", "Btg1", "Fxyd5", "Srgn", "Malat1",                         
+  "Dusp1", "Jund", "Fth1", "Ccl6", "Msrb1", "Csf3r", "Junb", "H2-D1"                               
+))
+
+# Generate a dot plot for the selected marker genes.
+DotPlot(Neuts, features = Neut_features) + 
+  scale_colour_gradient2(low = muted("blue"), mid = "white", high = muted("red"), 
+                         midpoint = 0, limits = c(-2, 2), oob = scales::squish) +  
+  theme(
+    axis.text.x = element_text(size = 12, angle = 45, hjust = 1, colour = "black"), # x-axis text
+    panel.grid.major = element_line(size = 0.5, linetype = "solid", colour = "gray"),  # Major grid lines
+    panel.grid.minor = element_blank(),                                                # Remove minor grid lines
+    panel.background = element_blank(),                                                  # Transparent background
+    panel.border = element_rect(colour = "black", fill = NA, size = 1),                    # Add panel border
+    legend.position = "bottom"                                                           # Place legend at the bottom
+  )
+```
+
+
+
+Rename Neutrophil Subclusters & Filter
+
+In this section, we rename neutrophil clusters to their corresponding P0–P4 subcluster labels, set consistent factor orders for CellType, Day, and Tissue, and then filter to retain only the subclusters and tissues of interest. P0 was found to be erythrocytes, so is filtered out. Blood was mostly this P0/erythorocyte cluster, so we filter it out here. 
+
+```{r Rename Neutrophil Subclusters & Filter, warning=FALSE, message=FALSE}
+# Rename cluster identities to meaningful subcluster labels.
+Neuts <- RenameIdents(Neuts,
+  "0" = "P4_2",
+  "1" = "P4_1",
+  "2" = "P3",
+  "3" = "P2",
+  "4" = "P1",
+  "5" = "P0"
+)
+
+# Create a metadata column 'CellType' from the current identities.
+Neuts$CellType <- Idents(Neuts)
+
+# Order CellType factor levels for coherent plotting.
+Neuts$CellType <- factor(Neuts$CellType,
+  levels = c("P0", "P1", "P2", "P3", "P4_1", "P4_2")
+)
+
+# Order Day factor levels chronologically.
+Neuts$Day <- factor(Neuts$Day,
+  levels = c("D0", "D7", "D14", "D21")
+)
+
+# Filter to retain only subclusters P1–P4_2.
+Neuts <- subset(Neuts, subset = CellType %in% c("P1", "P2", "P3", "P4_1", "P4_2"))
+Neuts$CellType <- factor(Neuts$CellType,
+  levels = c("P1", "P2", "P3", "P4_1", "P4_2")
+)
+
+# Filter to include only Spleen, Lung, and Scaffold tissues and set factor order.
+Neuts <- subset(Neuts, subset = Tissue %in% c("Spleen", "Lung", "Scaffold"))
+Neuts$Tissue <- factor(Neuts$Tissue,
+  levels = c("Spleen", "Lung", "Scaffold")
+)
+```
+
+
+
+Annotated Neutrophil Marker Expression Dotplot
+
+After renaming the neutrophil subclusters (P1–P4), we re-plot the same set of marker genes to visualize their expression across these annotated subclusters. The dot plot uses a diverging color gradient and custom theme adjustments for clarity.
+
+```{r Annotated Neutrophil Marker Expression Dotplot, warning=FALSE, message=FALSE}
 # Define marker genes in reversed order for plotting.
 Neut_features <- rev(c(
   "Rps27", "Ptma", "Hmgb1", "Cebpe", "H2afz", "Tubb5", "Ube2c", "Stmn1", "Calm2", "Tuba1b",   # Purely P0/P1
@@ -518,12 +596,240 @@ DotPlot(Neuts, features = Neut_features) +
     panel.border = element_rect(colour = "black", fill = NA, size = 1),                    # Add panel border
     legend.position = "bottom"                                                           # Place legend at the bottom
   )
+
+rm(Neut_features)
 ```
 
 
 
-```{r}
-Temp
+Neutrophil UMAP Projections Post‑Annotation
+
+In this section, we re-visualize the neutrophil UMAP embedding after assigning annotated subcluster identities. We plot the embedding colored by subcluster, tissue origin, and sampling day, using a consistent point size for clarity.
+
+```{r Neutrophil UMAP Projections Post‑Annotation, warning=FALSE, message=FALSE}
+# UMAP plot colored by annotated subclusters (CellType), without labels.
+# Use a moderate point size for readability; remove the plot title.
+DimPlot(Neuts, reduction = "umap", label = FALSE, pt.size = 0.5) + 
+  ggtitle(NULL)
+
+# UMAP plot colored by tissue of origin (Spleen, Lung, Scaffold).
+DimPlot(Neuts, reduction = "umap", group.by = "Tissue", pt.size = 0.5) + 
+  ggtitle(NULL)
+
+# UMAP plot colored by sampling day (D0–D21).
+DimPlot(Neuts, reduction = "umap", group.by = "Day", pt.size = 0.5) + 
+  ggtitle(NULL)
+```
+
+
+
+Neutrophil Subtype Counts Summary
+
+This section computes and displays contingency tables of neutrophil subcluster counts by (1) sampling day, (2) tissue of origin, and (3) biological replicate, including marginal totals for quick overview of distribution.
+
+```{r Neutrophil Subtype Counts Summary, warning=FALSE, message=FALSE}
+# Counts of each neutrophil subcluster across sampling days (with row/column totals).
+addmargins(table(Neuts@meta.data$CellType, Neuts@meta.data$Day))
+
+# Counts of each neutrophil subcluster by tissue of origin.
+addmargins(table(Neuts@meta.data$CellType, Neuts@meta.data$Tissue))
+
+# Counts of each neutrophil subcluster across biological replicates.
+addmargins(table(Neuts@meta.data$CellType, Neuts@meta.data$Replicate))
+```
+
+
+
+Neutrophil Subtype Counts by Tissue & Day
+
+Here we compute and display the counts of each neutrophil subcluster across sampling days for each tissue, including marginal totals to assess distribution.
+
+```{r Neutrophil Subtype Counts by Tissue & Day, warning=FALSE, message=FALSE}
+# Lung: counts by subcluster and day
+print("Lung: Neutrophil counts by Day")
+temp <- subset(Neuts, subset = Tissue == "Lung")
+addmargins(table(temp@meta.data$CellType, temp@meta.data$Day))
+
+# Scaffold: counts by subcluster and day
+print("Scaffold: Neutrophil counts by Day")
+temp <- subset(Neuts, subset = Tissue == "Scaffold")
+addmargins(table(temp@meta.data$CellType, temp@meta.data$Day))
+
+# Spleen: counts by subcluster and day
+print("Spleen: Neutrophil counts by Day")
+temp <- subset(Neuts, subset = Tissue == "Spleen")
+addmargins(table(temp@meta.data$CellType, temp@meta.data$Day))
+
+# Clean up temporary variable
+rm(temp)
+```
+
+
+
+Neutrophil Subcluster Proportions by Day and Tissue
+
+This section visualizes the distribution of neutrophil subclusters (P1–P4) over time within each tissue using stacked bar charts, and compares subcluster proportions across tissues with a flipped bar chart.
+
+```{r Neutrophil Subcluster Proportions by Day and Tissue, message=FALSE, warning=FALSE}
+# 1. Helper function to plot subcluster percent by day for a given tissue.
+plot_subtype_by_day <- function(obj, tissue) {
+  # Subset to the specified tissue.
+  temp1 <- subset(obj, subset = Tissue == tissue)
+  # Create a data frame of counts per Day and CellType.
+  temp2 <- data.frame(table(temp1@meta.data$CellType, temp1$Day))
+  
+  # Rename columns and compute percentages by Day.
+  temp2 <- temp2 %>%
+    dplyr::rename(CellType = Var1, Day = Var2) %>%
+    dplyr::group_by(Day) %>%
+    dplyr::mutate(Percent = Freq / sum(Freq) * 100)
+  
+  # Generate stacked bar chart.
+  ggplot(temp2, aes(x = Day, y = Percent, fill = CellType)) +
+    geom_bar(stat = "identity", colour = "black") +
+    scale_y_continuous(breaks = seq(0, 100, 20), limits = c(0, 100.00001), expand = c(0, 0)) +
+    theme(
+      text = element_text(size = 20, colour = "black"),
+      axis.text.x = element_text(size = 20, colour = "black"),
+      axis.text.y = element_text(size = 20, colour = "black"),
+      axis.line.x = element_blank(),
+      axis.ticks.x = element_blank(),
+      axis.line.y = element_line(size = 1, colour = "black", linetype = 1),
+      axis.ticks.length.y = unit(0.25, "cm"),
+      axis.ticks.y = element_line(size = 1, colour = "black"),
+      plot.background = element_rect(fill = "transparent", colour = NA),
+      panel.background = element_rect(fill = "transparent", colour = NA)
+    )
+}
+
+# 2. Generate plots for each tissue with titles.
+SB_lung   <- plot_subtype_by_day(Neuts, "Lung")   + ggtitle("Lung")
+SB_spleen <- plot_subtype_by_day(Neuts, "Spleen") + ggtitle("Spleen")
+SB_scaf   <- plot_subtype_by_day(Neuts, "Scaffold") + ggtitle("Scaffold")
+
+# 3. Combine the three stacked bar charts side-by-side.
+SB_spleen + theme(legend.position = "none", axis.title.x = element_blank()) +
+  SB_lung +   theme(legend.position = "none", legend.title = element_blank(), axis.title.y = element_blank()) +
+  SB_scaf +   theme(axis.title.y = element_blank(), axis.title.x = element_blank(), legend.position = "right")
+
+# Clean up helper function and plot objects.
+rm(plot_subtype_by_day, SB_spleen, SB_lung, SB_scaf)
+
+
+# 4. Prepare data to compare subcluster proportions across tissues.
+# Subsample each tissue for equal representation.
+t1 <- subset(Neuts, subset = Tissue == "Spleen", downsample = 1000); Idents(t1) <- "tissue"
+t2 <- subset(Neuts, subset = Tissue == "Lung", downsample = 1000);   Idents(t2) <- "tissue"
+t3 <- subset(Neuts, subset = Tissue == "Scaffold", downsample = 1000); Idents(t3) <- "tissue"
+
+# Merge subsampled objects.
+t4 <- merge(t1, list(t2, t3))
+
+# Filter to subclusters P1–P4 only and tabulate counts by Tissue.
+temp1 <- subset(t4, subset = CellType %in% c("P1", "P2", "P3", "P4_1", "P4_2"))
+temp2 <- data.frame(table(temp1@meta.data$CellType, temp1@meta.data$Tissue))
+temp2 <- subset(temp2, Var1 != "P0")  # Exclude P0 if present.
+
+# Rename columns, compute percentages by CellType, and set factor levels.
+temp2 <- temp2 %>%
+  dplyr::rename(CellType = Var1, Tissue = Var2) %>%
+  dplyr::group_by(CellType) %>%
+  dplyr::mutate(Percent = Freq / sum(Freq) * 100)
+temp2$CellType <- factor(temp2$CellType, levels = c("P1", "P2", "P3", "P4_1", "P4_2"))
+
+# 5. Flipped bar chart: subcluster distribution across tissues.
+ggplot(temp2, aes(x = CellType, y = Percent, fill = Tissue)) +
+  geom_bar(stat = "identity", colour = "black") +
+  coord_flip() +
+  scale_y_continuous(breaks = seq(0, 100, 20), limits = c(0, 100.00001), expand = c(0, 0)) +
+  scale_fill_manual(values = c("#2CA02C", "#1F77B4", "#9467BD")) +
+  labs(x = NULL, y = "Percent", fill = NULL) +
+  theme(
+    text = element_text(size = 20, colour = "black"),
+    axis.text.x = element_text(size = 15, colour = "black"),
+    axis.text.y = element_text(size = 20, colour = "black"),
+    axis.line.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.line.y = element_line(size = 1, colour = "black", linetype = 1),
+    axis.ticks.length.y = unit(0.25, "cm"),
+    axis.ticks.y = element_line(size = 1, colour = "black"),
+    plot.background = element_rect(fill = "transparent", colour = NA),
+    panel.background = element_rect(fill = "transparent", colour = NA),
+    legend.position = "top",
+    legend.title = element_blank(),
+    plot.margin = unit(c(10, 10, 10, 10), "mm")
+  )
+
+# Clean up temporary objects.
+rm(t1, t2, t3, t4, temp1, temp2)
+```
+
+
+
+Neutrophil Cell Cycle Scoring & Visualization
+
+In this section, we assign each neutrophil to a cell‐cycle phase using predefined S and G2M gene sets, visualize the resulting S and G2M scores on the UMAP embedding, and then restore the annotated subcluster identities.
+```{r Neutrophil Cell Cycle Scoring & Visualization, message=FALSE, warning=FALSE}
+# 1. Score cell‐cycle phases
+#    - g2m.features: genes expressed during G2/M transition
+#    - s.features: genes expressed during S phase
+#    - set.ident = TRUE sets the active identity of each cell to its predicted phase
+Neuts <- CellCycleScoring(
+  Neuts,
+  g2m.features = cc.genes$g2m.genes,
+  s.features    = cc.genes$s.genes,
+  set.ident     = TRUE
+)
+
+# 2. Plot S phase scores on UMAP
+FeaturePlot(
+  Neuts,
+  features  = "S.Score",
+  reduction = "umap",
+  pt.size   = 0.5
+) +
+  scale_color_gradientn(
+    colours = c("lightgrey", "blue"),
+    limits  = c(0, 1)
+  ) +
+  ggtitle("S Score")
+
+# 3. Plot G2M phase scores on UMAP
+FeaturePlot(
+  Neuts,
+  features  = "G2M.Score",
+  reduction = "umap",
+  pt.size   = 0.5
+) +
+  scale_color_gradientn(
+    colours = c("lightgrey", "blue"),
+    limits  = c(0, 1)
+  ) +
+  ggtitle("G2M Score")
+
+# 4. Restore cell identities to annotated subclusters
+Neuts <- SetIdent(Neuts, value = Neuts@meta.data$CellType)
+```
+
+
+
+Neutrophil Maturation Scoring via CytoTRACE2
+############### WARNING: TAKES UP A LOT OF APPLICATION MEMORY ###############
+Here, we use CytoTRACE2 to estimate the developmental potential (maturation state) of each neutrophil and prepare the object for downstream visualization.
+```{r Neutrophil Maturation Scoring via CytoTRACE2, message=FALSE, warning=FALSE, include=FALSE}
+# 1. Load CytoTRACE2 library for developmental potential scoring
+library(CytoTRACE2)
+
+# 2. Configure parallelization and memory limits for CytoTRACE2
+future::plan("multisession", workers = 16)
+options(future.globals.maxSize = 24000 * 1024^2)
+
+# 3. Run CytoTRACE2 on the Seurat object
+#    - is_seurat = TRUE tells the function to accept a Seurat object directly
+Neuts <- cytotrace2(Neuts, is_seurat = TRUE)
+
+# 4. Reset memory limit for other operations
+options(future.globals.maxSize = 8000 * 1024^2)
 ```
 
 
@@ -622,24 +928,62 @@ Temp
 
 
 
-#### Figures for Publication
 
-```{r UMAP with annotated clusters}
-# Plot size (WxH): 500 x 450
-DimPlot(AllTissue, reduction = "umap", label = T)
-# Plot size (WxH): 500 x 450
-DimPlot(AllTissue, reduction = "umap", group.by = "Tissue")
 
-# Plot size (WxH): 500 x 450
-DimPlot(AllTissue, reduction = "umap", group.by = "dataset") + ggtitle(NULL)
 
-# Plot size (WxH): 1200 x 450
-DimPlot(AllTissue, reduction = "umap", split.by =  "Tissue")
 
-# Plot size (WxH): 1200 x 450
-DimPlot(AllTissue, reduction = "umap", split.by =  "Day")
-```
-# Figure 1F
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Main Body Figures (for Publication)
+### Figure 1F
 ```{r Stacked barchart of AllTissue by celltype, message=FALSE, warning=FALSE}
 # Backup original object
 Fallback_AllTissue <- AllTissue
@@ -695,54 +1039,201 @@ AllTissue <- Fallback_AllTissue
 rm(Fallback_AllTissue)
 ```
 
-# Figure 2
-```{r Neutrophil UMAP visualizations}
-
+### Figure 2A
+```{r Neutrophil UMAP Projections Post‑Annotation by SubCluster, warning=FALSE, message=FALSE}
+# UMAP plot colored by annotated subclusters (CellType), without labels.
+# Use a moderate point size for readability; remove the plot title.
 # Plot size (WxH): 500 x 450
-DimPlot(Neuts, reduction = "umap", label = T)
-# Plot size (WxH): 1200 x 400
-DimPlot(Neuts, reduction = "umap", group.by = "Tissue")
-# Plot size (WxH): 1200 x 400
-DimPlot(Neuts, reduction = "umap", group.by = "Day")
+DimPlot(Neuts, reduction = "umap", label = FALSE, pt.size = 0.5) + 
+  ggtitle(NULL)
+```
+
+### Figure 2B
+```{r Neutrophil UMAP Projections Post‑Annotation by Tissue and Day, warning=FALSE, message=FALSE}
+# UMAP plot colored by tissue of origin (Spleen, Lung, Scaffold).
 # Plot size (WxH): 500 x 450
-DimPlot(Neuts, reduction = "umap", group.by = "dataset")
+DimPlot(Neuts, reduction = "umap", group.by = "Tissue", pt.size = 0.5) + 
+  ggtitle(NULL)
 
-
-# Plot size (WxH): 1200 x 400
-par(mfrow = c(1,2), xpd=TRUE)
-g1 <- DimPlot(subset(Neuts, subset = Day %in% c("D0, D7", "D14")), reduction = "umap", label = T)
-g2 <- DimPlot(subset(Neuts, subset = Day %in% c("D21")), reduction = "umap", label = T)
-g1 + g2
-rm(g1, g2)
-par(mfrow = c(1,1), xpd=TRUE)
-
-DimPlot(subset(Neuts, subset = dataset == "Dropseq"), group.by = "Day", reduction = "umap")
-
-# Lung Stacked Barchart
-temp1 <- subset(Neuts, subset = Tissue == "Lung")
-temp2 <- data.frame(table(temp1@meta.data$seurat_clusters, temp1$Day))
-
-temp2 <- temp2 %>% dplyr::rename(seurat_clusters = Var1, Day = Var2) %>% 
-  dplyr::group_by(Day) %>% 
-  dplyr::mutate(Percent = Freq / sum(Freq)*100)
-
-# Plot size (WxH): 600 x 500
-ggplot(temp2, aes(x = Day, y = Percent, fill = seurat_clusters)) + 
-  geom_bar(stat = "identity", colour = "black") + 
-  theme(text = element_text(size = 20, colour = "black"),
-        axis.text.x = element_text(size = 20, colour = "black"),
-        axis.text.y = element_text(size = 20, colour = "black"),
-        axis.line.x = element_blank(),
-        axis.ticks.x = element_blank(),
-        axis.line.y = element_line(size = 1, colour = "black", linetype=1),
-        axis.ticks.length.y = unit(0.25, "cm"),
-        axis.ticks.y = element_line(size = 1, colour = "black"),
-        plot.background = element_rect(fill = "transparent", colour = NA_character_), 
-        panel.background = element_rect(fill = "transparent", colour = NA_character_)) +
-  scale_y_continuous(breaks = seq(0, 100, 20), limits = c(0,100.00001), expand = c(0, 0)) +
-  labs(title = "Lung")
-rm(temp1, temp2)
+# UMAP plot colored by sampling day (D0–D21).
+# Plot size (WxH): 500 x 450
+DimPlot(Neuts, reduction = "umap", group.by = "Day", pt.size = 0.5) + 
+  ggtitle(NULL)
 ```
 
 
+### Figure 2C
+```{r Annotated Neutrophil Marker Expression Dotplot, warning=FALSE, message=FALSE}
+# Define marker genes in reversed order for plotting.
+Neut_features <- rev(c(
+  "Rps27", "Ptma", "Hmgb1", "Cebpe", "H2afz", "Tubb5", "Ube2c", "Stmn1", "Calm2", "Tuba1b",   # Purely P0/P1
+  "Gm5483", "Hmgn2", "Hmgb2", "Serpinb1a", "Dstn", "Arhgdib", "Ngp", "Pglyrp1", "Cybb", "Cd177",  # Transition P1 -> P2
+  "Lyz2", "Ifitm6", "Anxa1", "Camp", "Lcn2", "Ltf", "Ly6c2", "Ly6g",                             # Transition P1 -> P2
+  "Prdx5", "Lgals3", "Prr13", "Mmp9", "Mgst1", "mt-Co1", "Mmp8", "Retnlg", "S100a6",               # Transition P2 -> P3
+  "Wfdc17", "Ifitm2", "Ifitm1", "Il1b", "Btg1", "Fxyd5", "Srgn", "Malat1",                         # Transition P2 -> P3
+  "Dusp1", "Jund", "Fth1", "Ccl6", "Msrb1", "Csf3r", "Junb", "H2-D1"                               # Transition P2 -> P3
+))
 
+# Generate a dot plot for the selected marker genes.
+# Plot size (WxH): 1100 x 220 with legend.position = "none" 
+DotPlot(Neuts, features = Neut_features) + 
+  scale_colour_gradient2(low = muted("blue"), mid = "white", high = muted("red"), 
+                         midpoint = 0, limits = c(-2, 2), oob = scales::squish) +  
+  theme(
+    axis.text.x = element_text(size = 12, angle = 45, hjust = 1, colour = "black"), # x-axis text
+    panel.grid.major = element_line(size = 0.5, linetype = "solid", colour = "gray"),  # Major grid lines
+    panel.grid.minor = element_blank(),                                                # Remove minor grid lines
+    panel.background = element_blank(),                                                  # Transparent background
+    panel.border = element_rect(colour = "black", fill = NA, size = 1),                    # Add panel border
+    legend.position = "bottom"                                                           # Place legend at the bottom
+  ) + ylab("") + xlab("")
+```
+
+
+### Figure 2G
+```{r Neutrophil Subcluster Proportions by Day and Tissue, message=FALSE, warning=FALSE}
+# 1. Helper function to plot subcluster percent by day for a given tissue.
+plot_subtype_by_day <- function(obj, tissue) {
+  # Subset to the specified tissue.
+  temp1 <- subset(obj, subset = Tissue == tissue)
+  # Create a data frame of counts per Day and CellType.
+  temp2 <- data.frame(table(temp1@meta.data$CellType, temp1$Day))
+  
+  # Rename columns and compute percentages by Day.
+  temp2 <- temp2 %>%
+    dplyr::rename(CellType = Var1, Day = Var2) %>%
+    dplyr::group_by(Day) %>%
+    dplyr::mutate(Percent = Freq / sum(Freq) * 100)
+  
+  # Generate stacked bar chart.
+  ggplot(temp2, aes(x = Day, y = Percent, fill = CellType)) +
+    geom_bar(stat = "identity", colour = "black") +
+    scale_y_continuous(breaks = seq(0, 100, 20), limits = c(0, 100.00001), expand = c(0, 0)) +
+    theme(
+      text = element_text(size = 20, colour = "black"),
+      axis.text.x = element_text(size = 20, colour = "black"),
+      axis.text.y = element_text(size = 20, colour = "black"),
+      axis.line.x = element_blank(),
+      axis.ticks.x = element_blank(),
+      axis.line.y = element_line(size = 1, colour = "black", linetype = 1),
+      axis.ticks.length.y = unit(0.25, "cm"),
+      axis.ticks.y = element_line(size = 1, colour = "black"),
+      plot.background = element_rect(fill = "transparent", colour = NA),
+      panel.background = element_rect(fill = "transparent", colour = NA)
+    )
+}
+
+# 2. Generate plots for each tissue with titles.
+SB_lung   <- plot_subtype_by_day(Neuts, "Lung")   + ggtitle("Lung")
+SB_spleen <- plot_subtype_by_day(Neuts, "Spleen") + ggtitle("Spleen")
+SB_scaf   <- plot_subtype_by_day(Neuts, "Scaffold") + ggtitle("Scaffold")
+
+# 3. Combine the three stacked bar charts side-by-side.
+SB_spleen + theme(legend.position = "none", axis.title.x = element_blank()) +
+  SB_lung +   theme(legend.position = "none", legend.title = element_blank(), axis.title.y = element_blank()) +
+  SB_scaf +   theme(axis.title.y = element_blank(), axis.title.x = element_blank(), legend.position = "right")
+
+# Clean up helper function and plot objects.
+rm(plot_subtype_by_day, SB_spleen, SB_lung, SB_scaf)
+
+
+
+```
+
+### Figure 2H
+```{r}
+# 4. Prepare data to compare subcluster proportions across tissues.
+# Subsample each tissue for equal representation.
+t1 <- subset(Neuts, subset = Tissue == "Spleen", downsample = 1000); Idents(t1) <- "tissue"
+t2 <- subset(Neuts, subset = Tissue == "Lung", downsample = 1000);   Idents(t2) <- "tissue"
+t3 <- subset(Neuts, subset = Tissue == "Scaffold", downsample = 1000); Idents(t3) <- "tissue"
+
+# Merge subsampled objects.
+t4 <- merge(t1, list(t2, t3))
+
+# Filter to subclusters P1–P4 only and tabulate counts by Tissue.
+temp1 <- subset(t4, subset = CellType %in% c("P1", "P2", "P3", "P4_1", "P4_2"))
+temp2 <- data.frame(table(temp1@meta.data$CellType, temp1@meta.data$Tissue))
+temp2 <- subset(temp2, Var1 != "P0")  # Exclude P0 if present.
+
+# Rename columns, compute percentages by CellType, and set factor levels.
+temp2 <- temp2 %>%
+  dplyr::rename(CellType = Var1, Tissue = Var2) %>%
+  dplyr::group_by(CellType) %>%
+  dplyr::mutate(Percent = Freq / sum(Freq) * 100)
+temp2$CellType <- factor(temp2$CellType, levels = c("P1", "P2", "P3", "P4_1", "P4_2"))
+
+# 5. Flipped bar chart: subcluster distribution across tissues.
+ggplot(temp2, aes(x = CellType, y = Percent, fill = Tissue)) +
+  geom_bar(stat = "identity", colour = "black") +
+  coord_flip() +
+  scale_y_continuous(breaks = seq(0, 100, 20), limits = c(0, 100.00001), expand = c(0, 0)) +
+  scale_fill_manual(values = c("#2CA02C", "#1F77B4", "#9467BD")) +
+  labs(x = NULL, y = "Percent", fill = NULL) +
+  theme(
+    text = element_text(size = 20, colour = "black"),
+    axis.text.x = element_text(size = 15, colour = "black"),
+    axis.text.y = element_text(size = 20, colour = "black"),
+    axis.line.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.line.y = element_line(size = 1, colour = "black", linetype = 1),
+    axis.ticks.length.y = unit(0.25, "cm"),
+    axis.ticks.y = element_line(size = 1, colour = "black"),
+    plot.background = element_rect(fill = "transparent", colour = NA),
+    panel.background = element_rect(fill = "transparent", colour = NA),
+    legend.position = "top",
+    legend.title = element_blank(),
+    plot.margin = unit(c(10, 10, 10, 10), "mm")
+  )
+
+# Clean up temporary objects.
+rm(t1, t2, t3, t4, temp1, temp2)
+```
+
+
+# Supplemental Figures (for Publication)
+
+### Figure S2A
+```{r Neutrophil Cell Cycle Scoring & Visualization, message=FALSE, warning=FALSE}
+# 1. Score cell‐cycle phases
+#    - g2m.features: genes expressed during G2/M transition
+#    - s.features: genes expressed during S phase
+#    - set.ident = TRUE sets the active identity of each cell to its predicted phase
+Neuts <- CellCycleScoring(
+  Neuts,
+  g2m.features = cc.genes$g2m.genes,
+  s.features    = cc.genes$s.genes,
+  set.ident     = TRUE
+)
+
+# 2. Plot S phase scores on UMAP
+# Plot size (WxH): 500 x 450
+FeaturePlot(
+  Neuts,
+  features  = "S.Score",
+  reduction = "umap",
+  pt.size   = 0.5
+) +
+  scale_color_gradientn(
+    colours = c("lightgrey", "blue"),
+    limits  = c(0, 1)
+  ) +
+  ggtitle("S Score")
+
+# 3. Plot G2M phase scores on UMAP
+# Plot size (WxH): 500 x 450
+FeaturePlot(
+  Neuts,
+  features  = "G2M.Score",
+  reduction = "umap",
+  pt.size   = 0.5
+) +
+  scale_color_gradientn(
+    colours = c("lightgrey", "blue"),
+    limits  = c(0, 1)
+  ) +
+  ggtitle("G2M Score")
+
+# 4. Restore cell identities to annotated subclusters
+Neuts <- SetIdent(Neuts, value = Neuts@meta.data$CellType)
+```

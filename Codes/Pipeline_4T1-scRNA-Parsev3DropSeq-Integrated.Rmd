@@ -764,6 +764,7 @@ ggplot(temp2, aes(x = CellType, y = Percent, fill = Tissue)) +
 rm(t1, t2, t3, t4, temp1, temp2)
 ```
 
+## Part IV: Neutrophil Cell Cycle Scoring
 
 
 Neutrophil Cell Cycle Scoring & Visualization
@@ -833,24 +834,242 @@ options(future.globals.maxSize = 8000 * 1024^2)
 ```
 
 
+```{r Load/Save Neutrophils}
+# saveRDS(Neuts, file = "/Users/ianschrack/Desktop/10882-IS/Neuts.rds")
+Neuts <- readRDS("/Users/ianschrack/Desktop/10882-IS/Neuts.rds") # Post cytotrace analysis
+```
 
 
 
+Neutrophil Maturation: CytoTRACE2 Visualization
+
+This section visualizes CytoTRACE2 outputs to interpret neutrophil differentiation trajectories. It includes:
+	1.	A clipped potency score UMAP,
+	2.	Potency category UMAP,
+	3.	Relative order score UMAP,
+	4.	Maturity comparisons across subclusters and tissues.
+
+```{r Neutrophil CytoTRACE2 Plotting, warning=FALSE, message=FALSE}
+# ─── Setup ─────────────────────────────────────────────────────────────────────
+
+# Adjust CytoTRACE2's relative score for interpretability:
+# Reverse and normalize score so 1 = least mature, 0 = most mature.
+Neuts$RevCytoTRACE2_Relative <- -1 * (Neuts$CytoTRACE2_Relative - 1)
+
+# Clear previous plot-related variables.
+rm(plot_list, labels, colors, x_limits, y_limits, potency_score_umap, rel_order_umap)
+
+# Define potency category labels and custom color scale (red = mature, blue = stem-like).
+labels <- c('Differentiated', 'Unipotent', 'Oligopotent', 'Multipotent', 'Pluripotent', 'Totipotent')
+colors <- c("#9E0142", "#F46D43", "#FEE08B", "#E6F598", "#66C2A5", "#5E4FA2")
+
+# Record coordinate range to ensure consistent UMAP plotting limits.
+x_limits <- range(Neuts@reductions$umap@cell.embeddings[, 1], na.rm = TRUE)
+y_limits <- range(Neuts@reductions$umap@cell.embeddings[, 2], na.rm = TRUE)
+
+# ─── Clipped Potency Score UMAP ────────────────────────────────────────────────
+
+# Invert and clip the raw CytoTRACE2 score (higher score = higher stemness).
+Neuts$CytoTRACE2_Score_clipped <- -pmax(pmin(5.5 - 6 * Neuts$CytoTRACE2_Score, 5), 0)
+
+# UMAP colored by clipped potency score.
+FeaturePlot(Neuts, "CytoTRACE2_Score_clipped", reduction = "umap", pt.size = 0.5) +
+  scale_colour_gradientn(
+    colours = rev(colors),
+    na.value = "transparent",
+    labels = labels,
+    limits = c(-5, 0),
+    name = "Potency score\n",
+    guide = guide_colorbar(frame.colour = "black", ticks.colour = "black")
+  ) +
+  coord_cartesian(xlim = x_limits, ylim = y_limits) +
+  labs(x = "UMAP1", y = "UMAP2", title = NULL) +
+  theme(
+    aspect.ratio = 1,
+    legend.text = element_text(size = 10),
+    legend.title = element_text(size = 12),
+    axis.text = element_text(size = 12),
+    axis.title = element_text(size = 12),
+    plot.title = element_text(size = 12, face = "bold", hjust = 0.5, margin = margin(b = 20))
+  )
+
+# ─── Potency Category UMAP ─────────────────────────────────────────────────────
+
+# UMAP colored by CytoTRACE2-assigned potency categories.
+DimPlot(Neuts, reduction = "umap", group.by = "CytoTRACE2_Potency", label = FALSE, pt.size = 0.5) +
+  scale_color_manual(
+    values = colors,
+    name = "Potency category",
+    breaks = rev(labels)
+  ) +
+  coord_cartesian(xlim = x_limits, ylim = y_limits) +
+  labs(x = "UMAP1", y = "UMAP2", title = NULL) +
+  theme(
+    aspect.ratio = 1,
+    legend.text = element_text(size = 10),
+    legend.title = element_text(size = 12),
+    axis.text = element_text(size = 12),
+    axis.title = element_text(size = 12),
+    plot.title = element_text(size = 12, face = "bold", hjust = 0.5, margin = margin(b = 20))
+  )
+
+# ─── Relative Score UMAP ───────────────────────────────────────────────────────
+
+# UMAP colored by CytoTRACE2's relative score (0 = stem-like, 1 = differentiated).
+FeaturePlot(Neuts, "CytoTRACE2_Relative", reduction = "umap", pt.size = 0.5) +
+  scale_colour_gradientn(
+    colours = c("#000004FF", "#3B0F70FF", "#8C2981FF", "#DE4968FF", "#FE9F6DFF", "#FCFDBFFF"),
+    na.value = "transparent",
+    limits = c(0, 1),
+    breaks = seq(0, 1, by = 0.2),
+    labels = c("1.0 (More diff.)", "0.8", "0.6", "0.4", "0.2", "0.0 (Less diff.)"),
+    name = "Relative\norder\n",
+    guide = guide_colorbar(frame.colour = "black", ticks.colour = "black")
+  ) +
+  coord_cartesian(xlim = x_limits, ylim = y_limits) +
+  labs(x = "UMAP1", y = "UMAP2", title = NULL) +
+  theme(
+    aspect.ratio = 1,
+    legend.text = element_text(size = 10),
+    legend.title = element_text(size = 12),
+    axis.text = element_text(size = 12),
+    axis.title = element_text(size = 12),
+    plot.title = element_text(size = 12, face = "bold", hjust = 0.5, margin = margin(b = 20))
+  )
+
+# ─── Maturity Score Violin Plots ───────────────────────────────────────────────
+
+# Compare relative maturity across neutrophil subclusters
+v1 <- VlnPlot(Neuts, features = "RevCytoTRACE2_Relative", group.by = "CellType", pt.size = 0) +
+  geom_boxplot(outlier.shape = NA, width = 0.1, color = "black", fill = "white", alpha = 0.5) +
+  labs(x = NULL, y = "Relative Maturity", title = NULL) +
+  theme(legend.position = "none")
+
+# Compare across tissues
+v2 <- VlnPlot(Neuts, features = "RevCytoTRACE2_Relative", group.by = "Tissue", pt.size = 0) +
+  geom_boxplot(outlier.shape = NA, width = 0.1, color = "black", fill = "white", alpha = 0.5) +
+  labs(x = NULL, y = NULL, title = NULL) +
+  theme(legend.position = "none")
+
+# Combine side-by-side
+cowplot::plot_grid(v1, v2, align = "h")
+
+# ─── Clean up ─────────────────────────────────────────────────────────────────
+
+rm(labels, colors, x_limits, y_limits, v1, v2)
+```
 
 
 
+Neutrophil CytoTRACE2 Potency Counts by Subcluster and Tissue
+
+This chunk summarizes the number of cells assigned to each CytoTRACE2 potency category, stratified by (1) annotated neutrophil subcluster and (2) tissue of origin. Row and column totals are included for easy interpretation of distributions.
+
+```{r Neutrophil CytoTRACE2 Potency Table Summaries, message=FALSE, warning=FALSE}
+# Contingency table: potency category × subcluster (CellType)
+addmargins(table(Neuts@meta.data$CytoTRACE2_Potency, Neuts@meta.data$CellType))
+
+# Contingency table: potency category × tissue
+addmargins(table(Neuts@meta.data$CytoTRACE2_Potency, Neuts@meta.data$Tissue))
+```
 
 
 
+## PartV: Communication Network Analysis (CellChat)
+
+#### Function to create CellChat objects for lung and scaffold
+This section defines a helper function to construct and preprocess CellChat objects from a Seurat object subset by tissue and timepoint. The function performs standard preprocessing, identifies overexpressed genes/interactions, and infers cell–cell communication networks. It is then used to generate and merge CellChat objects for lung and scaffold samples across four timepoints (D0, D7, D14, D21).
+
+```{r Function to create CellChat objects, message=FALSE, warning=FALSE}
+# Load mouse-specific ligand-receptor interaction database
+CellChatDB <- CellChatDB.mouse
+CC_Interactions <- as.data.frame(CellChatDB$interaction)
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Function: CreateCellChatObject
+# Description: Subsets a Seurat object by tissue and day, then returns a processed CellChat object.
+# ──────────────────────────────────────────────────────────────────────────────
+CreateCellChatObject <- function(object, tissue, timepoint) {
+  # Subset Seurat object to specific tissue and timepoint
+  seurat_subset <- subset(object, subset = Tissue == tissue & Day == timepoint)
+  
+  # Prepare metadata and labels for CellChat
+  cell_labels <- Idents(seurat_subset)
+  cellchat_meta <- data.frame(labels = cell_labels, row.names = names(cell_labels))
+  
+  # Initialize CellChat object
+  cellchat_obj <- createCellChat(object = seurat_subset, group.by = "ident", assay = "RNA")
+  cellchat_obj <- addMeta(cellchat_obj, meta = cellchat_meta)
+  cellchat_obj <- setIdent(cellchat_obj, ident.use = "labels")
+  cellchat_obj@DB <- CellChatDB  # Set the database
+  
+  # Preprocess the CellChat object
+  future::plan("multisession", workers = 4)
+  options(future.globals.maxSize = 8000 * 1024^2)
+  cellchat_obj <- subsetData(cellchat_obj)
+  cellchat_obj <- identifyOverExpressedGenes(cellchat_obj)
+  cellchat_obj <- identifyOverExpressedInteractions(cellchat_obj)
+  
+  # Run core communication inference and network analysis
+  cellchat_obj <- computeCommunProb(cellchat_obj, type = "triMean")
+  cellchat_obj <- aggregateNet(cellchat_obj)
+  cellchat_obj <- computeCommunProbPathway(cellchat_obj)
+  cellchat_obj <- filterCommunication(cellchat_obj, min.cells = 10)
+  cellchat_obj <- netAnalysis_computeCentrality(cellchat_obj, slot.name = "netP")
+  
+  return(cellchat_obj)
+}
+```
+
+
+Generate and merge CellChat objects for lung and scaffold
+
+This chunk creates CellChat objects for lung and scaffold tissues at four distinct timepoints (D0, D7, D14, D21) using the previously defined CreateCellChatObject() function. Each object’s intercellular communication network is inferred independently and then merged into a single longitudinal object (lung_merge_cc and scaf_merge_cc, respectively) for downstream comparative analysis.
+
+```{r Generate lung and scaffold CellChat objects, message=FALSE, warning=FALSE, include=FALSE}
+# Lung CellChat objects
+d0_lung_cc   <- CreateCellChatObject(AllTissue, "Lung", "D0")
+d7_lung_cc   <- CreateCellChatObject(AllTissue, "Lung", "D7")
+d14_lung_cc  <- CreateCellChatObject(AllTissue, "Lung", "D14")
+d21_lung_cc  <- CreateCellChatObject(AllTissue, "Lung", "D21")
+
+# Merge lung CellChat objects into a single longitudinal analysis object
+lungcc_object.list <- list(
+  d0.lung = d0_lung_cc,
+  d7.lung = d7_lung_cc,
+  d14.lung = d14_lung_cc,
+  d21.lung = d21_lung_cc
+)
+lung_merge_cc <- mergeCellChat(lungcc_object.list, add.names = names(lungcc_object.list))
+
+
+# Scaffold CellChat objects
+d0_scaf_cc   <- CreateCellChatObject(AllTissue, "Scaffold", "D0")
+d7_scaf_cc   <- CreateCellChatObject(AllTissue, "Scaffold", "D7")
+d14_scaf_cc  <- CreateCellChatObject(AllTissue, "Scaffold", "D14")
+d21_scaf_cc  <- CreateCellChatObject(AllTissue, "Scaffold", "D21")
+
+# Merge scaffold CellChat objects
+scafcc_object.list <- list(
+  d0.scaf = d0_scaf_cc,
+  d7.scaf = d7_scaf_cc,
+  d14.scaf = d14_scaf_cc,
+  d21.scaf = d21_scaf_cc
+)
+scaf_merge_cc <- mergeCellChat(scafcc_object.list, add.names = names(scafcc_object.list))
+
+rm(CC_Interactions, CellChatDB)
+```
 
 
 
-
-
-
-
-
-
+```{r Cellchat plotting}
+# Plot size (WxH): 600 x 300
+gg1 <- compareInteractions(lung_merge_cc, show.legend = F, color.use = "blue")
+gg2 <- compareInteractions(lung_merge_cc, show.legend = F, measure = "weight", color.use = "blue")
+gg1 + gg2
+rm(gg1, gg2)
+```
 
 
 
@@ -983,6 +1202,8 @@ options(future.globals.maxSize = 8000 * 1024^2)
 
 
 # Main Body Figures (for Publication)
+### 1D, 1E???
+
 ### Figure 1F
 ```{r Stacked barchart of AllTissue by celltype, message=FALSE, warning=FALSE}
 # Backup original object
@@ -1087,6 +1308,91 @@ DotPlot(Neuts, features = Neut_features) +
     panel.border = element_rect(colour = "black", fill = NA, size = 1),                    # Add panel border
     legend.position = "bottom"                                                           # Place legend at the bottom
   ) + ylab("") + xlab("")
+```
+
+### Figure 2E
+```{r Neutrophil CytoTRACE2 Potency Score UMAP, warning=FALSE, message=FALSE}
+# ─── Setup ─────────────────────────────────────────────────────────────────────
+
+# Adjust CytoTRACE2's relative score for interpretability:
+# Reverse and normalize score so 1 = least mature, 0 = most mature.
+Neuts$RevCytoTRACE2_Relative <- -1 * (Neuts$CytoTRACE2_Relative - 1)
+
+# Define potency category labels and custom color scale (red = mature, blue = stem-like).
+labels <- c('Differentiated', 'Unipotent', 'Oligopotent', 'Multipotent', 'Pluripotent', 'Totipotent')
+colors <- c("#9E0142", "#F46D43", "#FEE08B", "#E6F598", "#66C2A5", "#5E4FA2")
+
+# Record coordinate range to ensure consistent UMAP plotting limits.
+x_limits <- range(Neuts@reductions$umap@cell.embeddings[, 1], na.rm = TRUE)
+y_limits <- range(Neuts@reductions$umap@cell.embeddings[, 2], na.rm = TRUE)
+
+# ─── Clipped Potency Score UMAP ────────────────────────────────────────────────
+
+# Invert and clip the raw CytoTRACE2 score (higher score = higher stemness).
+Neuts$CytoTRACE2_Score_clipped <- -pmax(pmin(5.5 - 6 * Neuts$CytoTRACE2_Score, 5), 0)
+
+# UMAP colored by clipped potency score.
+FeaturePlot(Neuts, "CytoTRACE2_Score_clipped", reduction = "umap", pt.size = 0.5) +
+  scale_colour_gradientn(
+    colours = rev(colors),
+    na.value = "transparent",
+    labels = labels,
+    limits = c(-5, 0),
+    name = "Potency score\n",
+    guide = guide_colorbar(frame.colour = "black", ticks.colour = "black")
+  ) +
+  coord_cartesian(xlim = x_limits, ylim = y_limits) +
+  labs(x = "UMAP1", y = "UMAP2", title = NULL) +
+  theme(
+    aspect.ratio = 1,
+    legend.text = element_text(size = 10),
+    legend.title = element_text(size = 12),
+    axis.text = element_text(size = 12),
+    axis.title = element_text(size = 12),
+    plot.title = element_text(size = 12, face = "bold", hjust = 0.5, margin = margin(b = 20))
+  )
+
+# ─── Clean up ─────────────────────────────────────────────────────────────────
+
+rm(labels, colors, x_limits, y_limits)
+```
+
+### Figure 2F
+```{r}
+# ─── Setup ─────────────────────────────────────────────────────────────────────
+
+# Adjust CytoTRACE2's relative score for interpretability:
+# Reverse and normalize score so 1 = least mature, 0 = most mature.
+Neuts$RevCytoTRACE2_Relative <- -1 * (Neuts$CytoTRACE2_Relative - 1)
+
+# Define potency category labels and custom color scale (red = mature, blue = stem-like).
+labels <- c('Differentiated', 'Unipotent', 'Oligopotent', 'Multipotent', 'Pluripotent', 'Totipotent')
+colors <- c("#9E0142", "#F46D43", "#FEE08B", "#E6F598", "#66C2A5", "#5E4FA2")
+
+# Record coordinate range to ensure consistent UMAP plotting limits.
+x_limits <- range(Neuts@reductions$umap@cell.embeddings[, 1], na.rm = TRUE)
+y_limits <- range(Neuts@reductions$umap@cell.embeddings[, 2], na.rm = TRUE)
+
+# ─── Maturity Score Violin Plots ───────────────────────────────────────────────
+
+# Compare relative maturity across neutrophil subclusters
+v1 <- VlnPlot(Neuts, features = "RevCytoTRACE2_Relative", group.by = "CellType", pt.size = 0) +
+  geom_boxplot(outlier.shape = NA, width = 0.1, color = "black", fill = "white", alpha = 0.5) +
+  labs(x = NULL, y = "Relative Maturity", title = NULL) +
+  theme(legend.position = "none")
+
+# Compare across tissues
+v2 <- VlnPlot(Neuts, features = "RevCytoTRACE2_Relative", group.by = "Tissue", pt.size = 0) +
+  geom_boxplot(outlier.shape = NA, width = 0.1, color = "black", fill = "white", alpha = 0.5) +
+  labs(x = NULL, y = NULL, title = NULL) +
+  theme(legend.position = "none")
+
+# Combine side-by-side
+cowplot::plot_grid(v1, v2, align = "h")
+
+# ─── Clean up ─────────────────────────────────────────────────────────────────
+
+rm(labels, colors, x_limits, y_limits, v1, v2)
 ```
 
 
@@ -1237,3 +1543,426 @@ FeaturePlot(
 # 4. Restore cell identities to annotated subclusters
 Neuts <- SetIdent(Neuts, value = Neuts@meta.data$CellType)
 ```
+
+
+
+
+Neutrophil Maturation: CytoTRACE2 Visualization
+
+This section visualizes CytoTRACE2 outputs to interpret neutrophil differentiation trajectories. It includes:
+	1.	A clipped potency score UMAP,
+	2.	Potency category UMAP,
+	3.	Relative order score UMAP,
+	4.	Maturity comparisons across subclusters and tissues.
+
+```{r Neutrophil CytoTRACE2 Plotting, warning=FALSE, message=FALSE}
+# ─── Setup ─────────────────────────────────────────────────────────────────────
+
+# Adjust CytoTRACE2's relative score for interpretability:
+# Reverse and normalize score so 1 = least mature, 0 = most mature.
+Neuts$RevCytoTRACE2_Relative <- -1 * (Neuts$CytoTRACE2_Relative - 1)
+
+# Clear previous plot-related variables.
+rm(plot_list, labels, colors, x_limits, y_limits, potency_score_umap, rel_order_umap)
+
+# Define potency category labels and custom color scale (red = mature, blue = stem-like).
+labels <- c('Differentiated', 'Unipotent', 'Oligopotent', 'Multipotent', 'Pluripotent', 'Totipotent')
+colors <- c("#9E0142", "#F46D43", "#FEE08B", "#E6F598", "#66C2A5", "#5E4FA2")
+
+# Record coordinate range to ensure consistent UMAP plotting limits.
+x_limits <- range(Neuts@reductions$umap@cell.embeddings[, 1], na.rm = TRUE)
+y_limits <- range(Neuts@reductions$umap@cell.embeddings[, 2], na.rm = TRUE)
+
+# ─── Clipped Potency Score UMAP ────────────────────────────────────────────────
+
+# Invert and clip the raw CytoTRACE2 score (higher score = higher stemness).
+Neuts$CytoTRACE2_Score_clipped <- -pmax(pmin(5.5 - 6 * Neuts$CytoTRACE2_Score, 5), 0)
+
+# UMAP colored by clipped potency score.
+FeaturePlot(Neuts, "CytoTRACE2_Score_clipped", reduction = "umap", pt.size = 0.5) +
+  scale_colour_gradientn(
+    colours = rev(colors),
+    na.value = "transparent",
+    labels = labels,
+    limits = c(-5, 0),
+    name = "Potency score\n",
+    guide = guide_colorbar(frame.colour = "black", ticks.colour = "black")
+  ) +
+  coord_cartesian(xlim = x_limits, ylim = y_limits) +
+  labs(x = "UMAP1", y = "UMAP2", title = NULL) +
+  theme(
+    aspect.ratio = 1,
+    legend.text = element_text(size = 10),
+    legend.title = element_text(size = 12),
+    axis.text = element_text(size = 12),
+    axis.title = element_text(size = 12),
+    plot.title = element_text(size = 12, face = "bold", hjust = 0.5, margin = margin(b = 20))
+  )
+
+# ─── Potency Category UMAP ─────────────────────────────────────────────────────
+
+# UMAP colored by CytoTRACE2-assigned potency categories.
+DimPlot(Neuts, reduction = "umap", group.by = "CytoTRACE2_Potency", label = FALSE, pt.size = 0.5) +
+  scale_color_manual(
+    values = colors,
+    name = "Potency category",
+    breaks = rev(labels)
+  ) +
+  coord_cartesian(xlim = x_limits, ylim = y_limits) +
+  labs(x = "UMAP1", y = "UMAP2", title = NULL) +
+  theme(
+    aspect.ratio = 1,
+    legend.text = element_text(size = 10),
+    legend.title = element_text(size = 12),
+    axis.text = element_text(size = 12),
+    axis.title = element_text(size = 12),
+    plot.title = element_text(size = 12, face = "bold", hjust = 0.5, margin = margin(b = 20))
+  )
+
+# ─── Relative Score UMAP ───────────────────────────────────────────────────────
+
+# UMAP colored by CytoTRACE2's relative score (0 = stem-like, 1 = differentiated).
+FeaturePlot(Neuts, "CytoTRACE2_Relative", reduction = "umap", pt.size = 0.5) +
+  scale_colour_gradientn(
+    colours = c("#000004FF", "#3B0F70FF", "#8C2981FF", "#DE4968FF", "#FE9F6DFF", "#FCFDBFFF"),
+    na.value = "transparent",
+    limits = c(0, 1),
+    breaks = seq(0, 1, by = 0.2),
+    labels = c("1.0 (More diff.)", "0.8", "0.6", "0.4", "0.2", "0.0 (Less diff.)"),
+    name = "Relative\norder\n",
+    guide = guide_colorbar(frame.colour = "black", ticks.colour = "black")
+  ) +
+  coord_cartesian(xlim = x_limits, ylim = y_limits) +
+  labs(x = "UMAP1", y = "UMAP2", title = NULL) +
+  theme(
+    aspect.ratio = 1,
+    legend.text = element_text(size = 10),
+    legend.title = element_text(size = 12),
+    axis.text = element_text(size = 12),
+    axis.title = element_text(size = 12),
+    plot.title = element_text(size = 12, face = "bold", hjust = 0.5, margin = margin(b = 20))
+  )
+
+# ─── Maturity Score Violin Plots ───────────────────────────────────────────────
+
+# Compare relative maturity across neutrophil subclusters
+v1 <- VlnPlot(Neuts, features = "RevCytoTRACE2_Relative", group.by = "CellType", pt.size = 0) +
+  geom_boxplot(outlier.shape = NA, width = 0.1, color = "black", fill = "white", alpha = 0.5) +
+  labs(x = NULL, y = "Relative Maturity", title = NULL) +
+  theme(legend.position = "none")
+
+# Compare across tissues
+v2 <- VlnPlot(Neuts, features = "RevCytoTRACE2_Relative", group.by = "Tissue", pt.size = 0) +
+  geom_boxplot(outlier.shape = NA, width = 0.1, color = "black", fill = "white", alpha = 0.5) +
+  labs(x = NULL, y = NULL, title = NULL) +
+  theme(legend.position = "none")
+
+# Combine side-by-side
+cowplot::plot_grid(v1, v2, align = "h")
+
+# ─── Clean up ─────────────────────────────────────────────────────────────────
+
+rm(plot_list, labels, colors, x_limits, y_limits, v1, v2)
+```
+
+#### Figure S3A
+```{r Lung incoming signals via CellChat, warning=FALSE, message=FALSE}
+# Compare outgoing/incoming signaling across lung samples
+i = 1
+pathway.union <- union(lungcc_object.list[[i]]@netP$pathways, 
+                       c(lungcc_object.list[[i+1]]@netP$pathways, 
+                       lungcc_object.list[[i+2]]@netP$pathways,
+                       lungcc_object.list[[i+3]]@netP$pathways))
+
+
+ht1 = netAnalysis_signalingRole_heatmap(lungcc_object.list[[i]], 
+                                        pattern = "incoming", signaling = pathway.union, 
+                                        title = names(lungcc_object.list)[i], width = 5, height = 20)
+
+ht2 = netAnalysis_signalingRole_heatmap(lungcc_object.list[[i+1]], 
+                                        pattern = "incoming", signaling = pathway.union, 
+                                        title = names(lungcc_object.list)[i+1], width = 5, height = 20)
+
+ht3 = netAnalysis_signalingRole_heatmap(lungcc_object.list[[i+2]], 
+                                        pattern = "incoming", signaling = pathway.union, 
+                                        title = names(lungcc_object.list)[i+2], width = 5, height = 20)
+
+ht4 = netAnalysis_signalingRole_heatmap(lungcc_object.list[[i+3]], 
+                                        pattern = "incoming", signaling = pathway.union, 
+                                        title = names(lungcc_object.list)[i+3], width = 5, height = 20)
+
+draw(ht1 + ht2 + ht3 + ht4, ht_gap = unit(0.5, "cm"))
+rm(ht1, ht2, ht3, ht4, i, pathway.union)
+```
+
+#### Figure S3B
+```{r Lung outgoing signals via CellChat, warning=FALSE, message=FALSE}
+# Compare outgoing/incoming signaling across lung samples
+i = 1
+pathway.union <- union(lungcc_object.list[[i]]@netP$pathways, 
+                       c(lungcc_object.list[[i+1]]@netP$pathways, 
+                       lungcc_object.list[[i+2]]@netP$pathways,
+                       lungcc_object.list[[i+3]]@netP$pathways))
+
+
+ht1 = netAnalysis_signalingRole_heatmap(lungcc_object.list[[i]], 
+                                        pattern = "outgoing", signaling = pathway.union, 
+                                        title = names(lungcc_object.list)[i], width = 5, height = 20)
+
+ht2 = netAnalysis_signalingRole_heatmap(lungcc_object.list[[i+1]], 
+                                        pattern = "outgoing", signaling = pathway.union, 
+                                        title = names(lungcc_object.list)[i+1], width = 5, height = 20)
+
+ht3 = netAnalysis_signalingRole_heatmap(lungcc_object.list[[i+2]], 
+                                        pattern = "outgoing", signaling = pathway.union, 
+                                        title = names(lungcc_object.list)[i+2], width = 5, height = 20)
+
+ht4 = netAnalysis_signalingRole_heatmap(lungcc_object.list[[i+3]], 
+                                        pattern = "outgoing", signaling = pathway.union, 
+                                        title = names(lungcc_object.list)[i+3], width = 5, height = 20)
+
+draw(ht1 + ht2 + ht3 + ht4, ht_gap = unit(0.5, "cm"))
+rm(ht1, ht2, ht3, ht4, i, pathway.union)
+```
+
+#### Figure S4A
+```{r Scaffold incoming signals via CellChat, warning=FALSE, message=FALSE}
+# Compare outgoing/incoming signaling across lung samples
+i = 1
+pathway.union <- union(lungcc_object.list[[i]]@netP$pathways, 
+                       c(lungcc_object.list[[i+1]]@netP$pathways, 
+                       lungcc_object.list[[i+2]]@netP$pathways,
+                       lungcc_object.list[[i+3]]@netP$pathways))
+
+
+ht1 = netAnalysis_signalingRole_heatmap(lungcc_object.list[[i]], 
+                                        pattern = "incoming", signaling = pathway.union, 
+                                        title = names(lungcc_object.list)[i], width = 5, height = 20)
+
+ht2 = netAnalysis_signalingRole_heatmap(lungcc_object.list[[i+1]], 
+                                        pattern = "incoming", signaling = pathway.union, 
+                                        title = names(lungcc_object.list)[i+1], width = 5, height = 20)
+
+ht3 = netAnalysis_signalingRole_heatmap(lungcc_object.list[[i+2]], 
+                                        pattern = "incoming", signaling = pathway.union, 
+                                        title = names(lungcc_object.list)[i+2], width = 5, height = 20)
+
+ht4 = netAnalysis_signalingRole_heatmap(lungcc_object.list[[i+3]], 
+                                        pattern = "incoming", signaling = pathway.union, 
+                                        title = names(lungcc_object.list)[i+3], width = 5, height = 20)
+
+draw(ht1 + ht2 + ht3 + ht4, ht_gap = unit(0.5, "cm"))
+rm(ht1, ht2, ht3, ht4, i, pathway.union)
+```
+
+#### Figure S4B
+```{r Scaffold outgoing signals via CellChat, warning=FALSE, message=FALSE}
+# Compare outgoing/incoming signaling across lung samples
+i = 1
+pathway.union <- union(scafcc_object.list[[i]]@netP$pathways, 
+                       c(scafcc_object.list[[i+1]]@netP$pathways, 
+                       scafcc_object.list[[i+2]]@netP$pathways,
+                       scafcc_object.list[[i+3]]@netP$pathways))
+
+ht1 = netAnalysis_signalingRole_heatmap(scafcc_object.list[[i]], 
+                                        pattern = "outgoing", signaling = pathway.union, 
+                                        title = names(lungcc_object.list)[i], width = 5, height = 20)
+
+ht2 = netAnalysis_signalingRole_heatmap(scafcc_object.list[[i+1]], 
+                                        pattern = "outgoing", signaling = pathway.union, 
+                                        title = names(lungcc_object.list)[i+1], width = 5, height = 20)
+
+ht3 = netAnalysis_signalingRole_heatmap(scafcc_object.list[[i+2]], 
+                                        pattern = "outgoing", signaling = pathway.union, 
+                                        title = names(lungcc_object.list)[i+2], width = 5, height = 20)
+
+ht4 = netAnalysis_signalingRole_heatmap(scafcc_object.list[[i+3]], 
+                                        pattern = "outgoing", signaling = pathway.union, 
+                                        title = names(lungcc_object.list)[i+3], width = 5, height = 20)
+
+draw(ht1 + ht2 + ht3 + ht4, ht_gap = unit(0.5, "cm"))
+rm(ht1, ht2, ht3, ht4, i, pathway.union)
+```
+
+
+
+
+
+#### Figure S7
+```{r Scaffold CellChat circle plot through time}
+#### Figure S7A ####
+object.list <- list(D0_Lung = d0_scaf_cc, D7_scaf = d7_scaf_cc, D14_scaf = d14_scaf_cc, D21_scaf = d21_scaf_cc)
+merged_cc <- mergeCellChat(object.list, add.names = c("D0_scaf", "D7_scaf", "D14_scaf", "D21_scaf"))
+weight.max <- getMaxWeight(object.list, attribute = c("idents","count"))
+
+i = 1
+# Plot size (WxH): 1400 x 700
+par(mfrow = c(1,4), xpd=TRUE)
+netVisual_circle(object.list[[i]]@net$count, 
+                 weight.scale = T, label.edge= F, edge.weight.max = weight.max[2], 
+                 edge.width.max = 10, arrow.size = 0.05, 
+                 title.name = paste0(""))
+
+  netVisual_circle(object.list[[i+1]]@net$count, 
+                 weight.scale = T, label.edge= F, edge.weight.max = weight.max[2], 
+                 edge.width.max = 10, arrow.size = 0.05, 
+                 title.name = paste0(""))
+
+netVisual_circle(object.list[[i+2]]@net$count, 
+                 weight.scale = T, label.edge= F, edge.weight.max = weight.max[2], 
+                 edge.width.max = 10, arrow.size = 0.05, 
+                 title.name = paste0(""))
+
+netVisual_circle(object.list[[i+3]]@net$count, 
+                 weight.scale = T, label.edge= F, edge.weight.max = weight.max[2], 
+                 edge.width.max = 10, arrow.size = 0.05, 
+                 title.name = paste0(""))
+par(mfrow = c(1,1), xpd=TRUE)
+
+rm(object.list, merged_cc, weight.max, i)
+```
+
+#### Figure S7B
+```{r}
+
+# Compare the major sources and targets
+num.link <- sapply(object.list, function(x) {rowSums(x@net$count) + colSums(x@net$count)-diag(x@net$count)})
+weight.MinMax <- c(min(num.link), max(num.link)) # control the dot size in the different datasets
+
+gg1 <- netAnalysis_signalingRole_scatter(object.list[[1]], weight.MinMax = weight.MinMax) + 
+    ylim(0, 2.8) + xlim(0, 6) + 
+    theme(axis.line = element_line(color = "black", size = 2), 
+          axis.text = element_text(color = "black", size = 12), 
+          axis.title = element_text(color = "black", size = 12, face = "bold"), 
+          plot.margin = unit(c(0.5, 0.5, 0.5, 0.5), "cm"), 
+          legend.position = "none") + 
+  ylim(0, 2.8) + xlim(0, 6)
+  
+gg2 <- netAnalysis_signalingRole_scatter(object.list[[2]], weight.MinMax = weight.MinMax) + 
+    ylim(0, 2.8) + xlim(0, 6) + 
+    theme(axis.line = element_line(color = "black", size = 2), 
+          axis.text = element_text(color = "black", size = 12),
+          axis.title.y = element_blank(), 
+          axis.title = element_text(color = "black", size = 12, face = "bold"), 
+          plot.margin = unit(c(0.5, 0.5, 0.5, 0.5), "cm"), 
+          legend.position = "none") + 
+  ylim(0, 2.8) + xlim(0, 6)  
+
+gg3 <- netAnalysis_signalingRole_scatter(object.list[[3]], weight.MinMax = weight.MinMax) + 
+    ylim(0, 2.8) + xlim(0, 6) + 
+    theme(axis.line = element_line(color = "black", size = 2), 
+          axis.text = element_text(color = "black", size = 12),
+          axis.title.y = element_blank(), 
+          axis.title = element_text(color = "black", size = 12, face = "bold"), 
+          plot.margin = unit(c(0.5, 0.5, 0.5, 0.5), "cm"), 
+          legend.position = "none") + 
+  ylim(0, 2.8) + xlim(0, 6)
+
+gg4 <- netAnalysis_signalingRole_scatter(object.list[[4]], weight.MinMax = weight.MinMax) + 
+    ylim(0, 2.8) + xlim(0, 6) + 
+    theme(axis.line = element_line(color = "black", size = 2), 
+          axis.text = element_text(color = "black", size = 12),
+          axis.title.y = element_blank(), 
+          axis.title = element_text(color = "black", size = 12, face = "bold"), 
+          plot.margin = unit(c(0.5, 0.5, 0.5, 0.5), "cm"), 
+          legend.position = "none") + 
+  ylim(0, 2.8) + xlim(0, 6)  
+
+
+# Plot size (WxH): 1200 x 350
+cowplot::plot_grid(gg1, gg2, gg3, gg4, align = "h", ncol = 4)
+
+rm(object.list, merged_cc, weight.max, i, gg1, gg2, gg3, gg4, num.link, weight.MinMax)
+```
+
+#### Figure S7C
+```{r}
+# COLLAGEN Signaling
+pathways.show <- c("COLLAGEN")
+gt1 = netVisual_heatmap(scafcc_object.list[[1]], signaling = pathways.show, color.heatmap = "Reds",
+                        title = names(lungcc_object.list)[1], font.size = 13, font.size.title = 0, 
+                        remove.isolate = F) # Day 0
+
+gt2 = netVisual_heatmap(scafcc_object.list[[2]], signaling = pathways.show, color.heatmap = "Reds", 
+                        title = names(lungcc_object.list)[2], font.size = 13, font.size.title = 0, 
+                        remove.isolate = F) # Day 7
+
+gt3 = netVisual_heatmap(scafcc_object.list[[3]], signaling = pathways.show, color.heatmap = "Reds", 
+                        title = names(lungcc_object.list)[3], font.size = 13, font.size.title = 0, 
+                        remove.isolate = F) # Day 14
+
+gt4 = netVisual_heatmap(scafcc_object.list[[4]], signaling = pathways.show, color.heatmap = "Reds", 
+                        title = names(lungcc_object.list)[4], font.size = 13, font.size.title = 0, 
+                        remove.isolate = F) # Day 21
+
+# Plot size (WxH): 1400 x 450
+gt1 + gt2 + gt3 + gt4
+
+# LAMININ Signaling
+pathways.show <- c("LAMININ")
+gt1 = netVisual_heatmap(scafcc_object.list[[1]], signaling = pathways.show, color.heatmap = "Reds",
+                        title = names(lungcc_object.list)[1], font.size = 13, font.size.title = 0, 
+                        remove.isolate = F) # Day 0
+
+gt2 = netVisual_heatmap(scafcc_object.list[[2]], signaling = pathways.show, color.heatmap = "Reds", 
+                        title = names(lungcc_object.list)[2], font.size = 13, font.size.title = 0, 
+                        remove.isolate = F) # Day 7
+
+gt3 = netVisual_heatmap(scafcc_object.list[[3]], signaling = pathways.show, color.heatmap = "Reds", 
+                        title = names(lungcc_object.list)[3], font.size = 13, font.size.title = 0, 
+                        remove.isolate = F) # Day 14
+
+gt4 = netVisual_heatmap(scafcc_object.list[[4]], signaling = pathways.show, color.heatmap = "Reds", 
+                        title = names(lungcc_object.list)[4], font.size = 13, font.size.title = 0, 
+                        remove.isolate = F) # Day 21
+
+
+# Plot size (WxH): 1400 x 450
+gt1 + gt2 + gt3 + gt4
+
+# FN1 Signaling
+pathways.show <- c("FN1")
+gt1 = netVisual_heatmap(scafcc_object.list[[1]], signaling = pathways.show, color.heatmap = "Reds",
+                        title = names(lungcc_object.list)[1], font.size = 13, font.size.title = 0, 
+                        remove.isolate = F) # Day 0
+
+gt2 = netVisual_heatmap(scafcc_object.list[[2]], signaling = pathways.show, color.heatmap = "Reds", 
+                        title = names(lungcc_object.list)[2], font.size = 13, font.size.title = 0, 
+                        remove.isolate = F) # Day 7
+
+gt3 = netVisual_heatmap(scafcc_object.list[[3]], signaling = pathways.show, color.heatmap = "Reds", 
+                        title = names(lungcc_object.list)[3], font.size = 13, font.size.title = 0, 
+                        remove.isolate = F) # Day 14
+
+gt4 = netVisual_heatmap(scafcc_object.list[[4]], signaling = pathways.show, color.heatmap = "Reds", 
+                        title = names(lungcc_object.list)[4], font.size = 13, font.size.title = 0, 
+                        remove.isolate = F) # Day 21
+
+# Plot size (WxH): 1400 x 450
+gt1 + gt2 + gt3 + gt4
+
+rm(gt1, gt2, gt3, gt4, pathways.show)
+```
+
+#### Figure S7D
+```{r}
+v1 <- VlnPlot(subset(Neuts, subset = Tissue %in% c("Scaffold", "Lung", "Spleen")), 
+              features = "Fpr2", y.max = 5.5) + 
+  theme(legend.position = "none", axis.title.x = element_blank(), 
+        axis.text = element_text(color = "black", size = 15), 
+        axis.title.y = element_text(color = "black", size = 15, face = "bold")) + 
+  ggtitle(NULL) + ylab("Neutrophil Fpr2")
+
+v2 <- VlnPlot(subset(AllTissue, subset = Tissue %in% c("Scaffold")), idents = "Macrophage", 
+        features = "Anxa1", group.by = "Day", y.max = 5.5) + 
+  theme(legend.position = "none", axis.title.x = element_blank(), 
+        axis.text = element_text(color = "black", size = 15), 
+        axis.title.y = element_text(color = "black", size = 15, face = "bold")) + 
+  ggtitle(NULL) + ylab("Macrophage Anxa1")
+
+# Plot size (WxH): 700 x 350
+cowplot::plot_grid(v1, v2, align = "h", ncol = 2)
+
+rm(v1, v2)
+```
+

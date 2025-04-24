@@ -1061,17 +1061,81 @@ scaf_merge_cc <- mergeCellChat(scafcc_object.list, add.names = names(scafcc_obje
 rm(CC_Interactions, CellChatDB)
 ```
 
+```{r Lung Cellchat plotting}
+weight.max <- getMaxWeight(lungcc_object.list, attribute = c("idents","count"))
 
+# Plot size (WxH): 1400 x 700
+par(mfrow = c(1,4), xpd=TRUE)
+for (i in 1:4) {
+  netVisual_circle(lungcc_object.list[[i]]@net$count, 
+                 weight.scale = T, label.edge= F, edge.weight.max = weight.max[2], 
+                 edge.width.max = 10, arrow.size = 0.05, 
+                 title.name = paste0(""))
+}
+par(mfrow = c(1,1), xpd=TRUE)
 
-```{r Cellchat plotting}
-# Plot size (WxH): 600 x 300
-gg1 <- compareInteractions(lung_merge_cc, show.legend = F, color.use = "blue")
-gg2 <- compareInteractions(lung_merge_cc, show.legend = F, measure = "weight", color.use = "blue")
-gg1 + gg2
-rm(gg1, gg2)
+rm(weight.max)
+
+# Compare the major sources and targets
+num.link <- sapply(lungcc_object.list, function(x) {rowSums(x@net$count) + colSums(x@net$count)-diag(x@net$count)})
+weight.MinMax <- c(min(num.link), max(num.link)) # control the dot size in the different datasets
+
+plot_list <- list()
+
+for (i in 1:4){
+  plot_list[[i]] <- netAnalysis_signalingRole_scatter(lungcc_object.list[[i]], weight.MinMax = weight.MinMax) + 
+    ylim(0, 2.8) + xlim(0, 6) + 
+    theme(axis.line = element_line(color = "black", size = 2), 
+          axis.text = element_text(color = "black", size = 12), 
+          axis.title = element_text(color = "black", size = 12, face = "bold"), 
+          plot.margin = unit(c(0.5, 0.5, 0.5, 0.5), "cm"), 
+          legend.position = "none") + 
+  ylim(0, 2.8) + xlim(0, 6)
+}
+
+# Plot size (WxH): 1200 x 350
+cowplot::plot_grid(plot_list[[1]], plot_list[[2]], plot_list[[3]], plot_list[[4]], align = "h", ncol = 4)
+
+rm(num.link, weight.MinMax, plot_list)
 ```
 
+```{r Scaffold Cellchat plotting, warning=FALSE, message=FALSE}
+weight.max <- getMaxWeight(scafcc_object.list, attribute = c("idents","count"))
 
+# Plot size (WxH): 1400 x 700
+par(mfrow = c(1,4), xpd=TRUE)
+for (i in 1:4) {
+  netVisual_circle(scafcc_object.list[[i]]@net$count, 
+                 weight.scale = T, label.edge= F, edge.weight.max = weight.max[2], 
+                 edge.width.max = 10, arrow.size = 0.05, 
+                 title.name = paste0(""))
+}
+par(mfrow = c(1,1), xpd=TRUE)
+
+rm(weight.max)
+
+# Compare the major sources and targets
+num.link <- sapply(scafcc_object.list, function(x) {rowSums(x@net$count) + colSums(x@net$count)-diag(x@net$count)})
+weight.MinMax <- c(min(num.link), max(num.link)) # control the dot size in the different datasets
+
+plot_list <- list()
+
+for (i in 1:4){
+  plot_list[[i]] <- netAnalysis_signalingRole_scatter(scafcc_object.list[[i]], weight.MinMax = weight.MinMax) + 
+    ylim(0, 2.8) + xlim(0, 6) + 
+    theme(axis.line = element_line(color = "black", size = 2), 
+          axis.text = element_text(color = "black", size = 12), 
+          axis.title = element_text(color = "black", size = 12, face = "bold"), 
+          plot.margin = unit(c(0.5, 0.5, 0.5, 0.5), "cm"), 
+          legend.position = "none") + 
+  ylim(0, 2.8) + xlim(0, 6)
+}
+
+# Plot size (WxH): 1200 x 350
+cowplot::plot_grid(plot_list[[1]], plot_list[[2]], plot_list[[3]], plot_list[[4]], align = "h", ncol = 4)
+
+rm(num.link, weight.MinMax, plot_list)
+```
 
 
 
@@ -1790,46 +1854,31 @@ rm(ht1, ht2, ht3, ht4, i, pathway.union)
 
 #### Figure S7
 ```{r Scaffold CellChat circle plot through time}
-#### Figure S7A ####
-object.list <- list(D0_Lung = d0_scaf_cc, D7_scaf = d7_scaf_cc, D14_scaf = d14_scaf_cc, D21_scaf = d21_scaf_cc)
-merged_cc <- mergeCellChat(object.list, add.names = c("D0_scaf", "D7_scaf", "D14_scaf", "D21_scaf"))
-weight.max <- getMaxWeight(object.list, attribute = c("idents","count"))
+weight.max <- getMaxWeight(scafcc_object.list, attribute = c("idents","count"))
 
-i = 1
 # Plot size (WxH): 1400 x 700
 par(mfrow = c(1,4), xpd=TRUE)
-netVisual_circle(object.list[[i]]@net$count, 
+for (i in 1:4) {
+  netVisual_circle(scafcc_object.list[[i]]@net$count, 
                  weight.scale = T, label.edge= F, edge.weight.max = weight.max[2], 
                  edge.width.max = 10, arrow.size = 0.05, 
                  title.name = paste0(""))
-
-  netVisual_circle(object.list[[i+1]]@net$count, 
-                 weight.scale = T, label.edge= F, edge.weight.max = weight.max[2], 
-                 edge.width.max = 10, arrow.size = 0.05, 
-                 title.name = paste0(""))
-
-netVisual_circle(object.list[[i+2]]@net$count, 
-                 weight.scale = T, label.edge= F, edge.weight.max = weight.max[2], 
-                 edge.width.max = 10, arrow.size = 0.05, 
-                 title.name = paste0(""))
-
-netVisual_circle(object.list[[i+3]]@net$count, 
-                 weight.scale = T, label.edge= F, edge.weight.max = weight.max[2], 
-                 edge.width.max = 10, arrow.size = 0.05, 
-                 title.name = paste0(""))
+}
 par(mfrow = c(1,1), xpd=TRUE)
 
-rm(object.list, merged_cc, weight.max, i)
+rm(weight.max)
 ```
 
 #### Figure S7B
-```{r}
-
+```{r Scaffold major sources and targets, message=FALSE, warning=FALSE}
 # Compare the major sources and targets
-num.link <- sapply(object.list, function(x) {rowSums(x@net$count) + colSums(x@net$count)-diag(x@net$count)})
+num.link <- sapply(scafcc_object.list, function(x) {rowSums(x@net$count) + colSums(x@net$count)-diag(x@net$count)})
 weight.MinMax <- c(min(num.link), max(num.link)) # control the dot size in the different datasets
 
-gg1 <- netAnalysis_signalingRole_scatter(object.list[[1]], weight.MinMax = weight.MinMax) + 
+plot_list <- list()
+
+for (i in 1:4){
+  plot_list[[i]] <- netAnalysis_signalingRole_scatter(scafcc_object.list[[i]], weight.MinMax = weight.MinMax) + 
     ylim(0, 2.8) + xlim(0, 6) + 
     theme(axis.line = element_line(color = "black", size = 2), 
           axis.text = element_text(color = "black", size = 12), 
@@ -1837,46 +1886,16 @@ gg1 <- netAnalysis_signalingRole_scatter(object.list[[1]], weight.MinMax = weigh
           plot.margin = unit(c(0.5, 0.5, 0.5, 0.5), "cm"), 
           legend.position = "none") + 
   ylim(0, 2.8) + xlim(0, 6)
-  
-gg2 <- netAnalysis_signalingRole_scatter(object.list[[2]], weight.MinMax = weight.MinMax) + 
-    ylim(0, 2.8) + xlim(0, 6) + 
-    theme(axis.line = element_line(color = "black", size = 2), 
-          axis.text = element_text(color = "black", size = 12),
-          axis.title.y = element_blank(), 
-          axis.title = element_text(color = "black", size = 12, face = "bold"), 
-          plot.margin = unit(c(0.5, 0.5, 0.5, 0.5), "cm"), 
-          legend.position = "none") + 
-  ylim(0, 2.8) + xlim(0, 6)  
-
-gg3 <- netAnalysis_signalingRole_scatter(object.list[[3]], weight.MinMax = weight.MinMax) + 
-    ylim(0, 2.8) + xlim(0, 6) + 
-    theme(axis.line = element_line(color = "black", size = 2), 
-          axis.text = element_text(color = "black", size = 12),
-          axis.title.y = element_blank(), 
-          axis.title = element_text(color = "black", size = 12, face = "bold"), 
-          plot.margin = unit(c(0.5, 0.5, 0.5, 0.5), "cm"), 
-          legend.position = "none") + 
-  ylim(0, 2.8) + xlim(0, 6)
-
-gg4 <- netAnalysis_signalingRole_scatter(object.list[[4]], weight.MinMax = weight.MinMax) + 
-    ylim(0, 2.8) + xlim(0, 6) + 
-    theme(axis.line = element_line(color = "black", size = 2), 
-          axis.text = element_text(color = "black", size = 12),
-          axis.title.y = element_blank(), 
-          axis.title = element_text(color = "black", size = 12, face = "bold"), 
-          plot.margin = unit(c(0.5, 0.5, 0.5, 0.5), "cm"), 
-          legend.position = "none") + 
-  ylim(0, 2.8) + xlim(0, 6)  
-
+}
 
 # Plot size (WxH): 1200 x 350
-cowplot::plot_grid(gg1, gg2, gg3, gg4, align = "h", ncol = 4)
+cowplot::plot_grid(plot_list[[1]], plot_list[[2]], plot_list[[3]], plot_list[[4]], align = "h", ncol = 4)
 
-rm(object.list, merged_cc, weight.max, i, gg1, gg2, gg3, gg4, num.link, weight.MinMax)
+rm(num.link, weight.MinMax, plot_list)
 ```
 
 #### Figure S7C
-```{r}
+```{r Scaffold ECM signaling through time, warning=FALSE, message=FALSE}
 # COLLAGEN Signaling
 pathways.show <- c("COLLAGEN")
 gt1 = netVisual_heatmap(scafcc_object.list[[1]], signaling = pathways.show, color.heatmap = "Reds",

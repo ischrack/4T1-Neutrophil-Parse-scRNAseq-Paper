@@ -1592,13 +1592,13 @@ rm(t1, t2, t3, t4, temp1, temp2)
 ```
 
 
-#### Figure 4A
+### Figure 4A
 ```{r}
 weight.max <- getMaxWeight(lungcc_object.list, attribute = c("idents","count"))
 
 # Plot size (WxH): 1400 x 700
-par(mfrow = c(1,4), xpd=TRUE)
-for (i in 1:4) {
+par(mfrow = c(1,2), xpd=TRUE)
+for (i in 1:2) {
   netVisual_circle(lungcc_object.list[[i]]@net$count, 
                  weight.scale = T, label.edge= F, edge.weight.max = weight.max[2], 
                  edge.width.max = 10, arrow.size = 0.05, 
@@ -1606,12 +1606,10 @@ for (i in 1:4) {
 }
 par(mfrow = c(1,1), xpd=TRUE)
 
-rm(weight.max)
-
-
+rm(weight.max, i)
 ```
 
-#### Figure 4B
+### Figure 4B
 ```{r}
 # Compare the major sources and targets
 num.link <- sapply(lungcc_object.list, function(x) {rowSums(x@net$count) + colSums(x@net$count)-diag(x@net$count)})
@@ -1634,13 +1632,13 @@ cowplot::plot_grid(plot_list[[1]], plot_list[[2]], align = "h", ncol = 2)
 
 # 
 d0_temp <- plot_list[[1]]$data
-d0_temp <- subset(d0_temp, subset = labels %in% c("Fibroblasts", "ECs"))
+d0_temp <- subset(d0_temp, subset = labels %in% c("Fibroblasts", "ECs", "Neutrophils"))
 names(d0_temp)[names(d0_temp) == 'x'] <- 'outgoing'
 names(d0_temp)[names(d0_temp) == 'y'] <- 'incoming'
 d0_temp$Day <- "D0"
 
 d7_temp <- plot_list[[2]]$data
-d7_temp <- subset(d7_temp, subset = labels %in% c("Fibroblasts", "ECs"))
+d7_temp <- subset(d7_temp, subset = labels %in% c("Fibroblasts", "ECs", "Neutrophils"))
 names(d7_temp)[names(d7_temp) == 'x'] <- 'outgoing'
 names(d7_temp)[names(d7_temp) == 'y'] <- 'incoming'
 d7_temp$Day <- "D7"
@@ -1707,9 +1705,120 @@ p2 <- ggplot(subset(combined_df, subset = labels == "ECs"), aes(y = incoming, x 
         panel.background = element_rect(fill = "transparent", colour = NA_character_)) + 
   labs(y = "", title = "ECs") + ylim(0, 2.5)
 
+p3 <- ggplot(subset(combined_df, subset = labels == "Neutrophils"), aes(y = incoming, x = Day)) + 
+  geom_bar(stat = "identity", position = "dodge", colour = "black", fill = "#E3221C") + 
+  theme(text = element_text(size = 20, colour = "black"),
+        axis.text.x = element_text(size = 20, colour = "black"),
+        axis.text.y = element_text(size = 20, colour = "black"),
+        axis.line.x = element_line(size = 1, colour = "black", linetype=1),
+        axis.ticks.x = element_blank(),
+        axis.line.y = element_line(size = 1, colour = "black", linetype=1),
+        axis.ticks.length.y = unit(0.25, "cm"),
+        axis.ticks.y = element_line(size = 1, colour = "black"),
+        plot.background = element_rect(fill = "transparent", colour = NA_character_), 
+        panel.background = element_rect(fill = "transparent", colour = NA_character_)) + 
+  labs(y = "Incoming Interaction Strength", title = "Neutrophils") + ylim(0, 4)
+
 cowplot::plot_grid(p1, p2, align = "h", ncol = 2)
 
-rm(num.link, weight.MinMax, plot_list, i, d0_temp, d7_temp, combined_df, p1, p2)
+rm(num.link, weight.MinMax, plot_list, i, d0_temp, d7_temp, combined_df, p1, p2, p3)
+```
+
+
+### Figure 4C
+```{r, warning=FALSE, message=FALSE}
+# Lung differential interactions heatmap for the following: 
+# Day 7 vs. Day 0
+
+netVisual_heatmap(lung_merge_cc, measure = "weight", 
+                  sources.use = c(1:6, 10:13), targets.use = c(1:6, 10:13), 
+                  remove.isolate = T, comparison = c(1, 2), 
+                  font.size = 13, font.size.title = 0)
+
+rm(plot_list)
+```
+
+### Figure 4D
+```{r, warning=FALSE, message=FALSE}
+#### Full time course fibroblast & EC signaling ####
+####################################################
+# Fibroblasts
+# Plot size (WxH): 1200 x 500
+netAnalysis_signalingChanges_scatter(lung_merge_cc, idents.use = "Fibroblasts", comparison = c(1, 2)) + 
+  theme(legend.position = "none", 
+        axis.text = element_text(size = 12, color = "black"), 
+        axis.title.y = element_text(size = 15, color = "black"), axis.title.x = element_blank()) + 
+  xlim(-0.1, 4) + ylim(-0.1, 0.7) + ggtitle(NULL) + 
+  netAnalysis_signalingChanges_scatter(lung_merge_cc, idents.use = "Fibroblasts", comparison = c(2, 3)) + 
+  theme(legend.position = "none", 
+        axis.text = element_text(size = 12, color = "black"), 
+        axis.title.x = element_text(size = 15, color = "black"), axis.title.y = element_blank()) + 
+  xlim(-0.4, 0.5) + ylim(-0.1, 0.2) + ggtitle(NULL) + 
+  netAnalysis_signalingChanges_scatter(lung_merge_cc, idents.use = "Fibroblasts", comparison = c(3, 4)) + 
+  theme(legend.position = "none", 
+        axis.text = element_text(size = 12, color = "black"), 
+        axis.title = element_blank()) + 
+  xlim(-3, 0.1) + ylim(-0.65, 0.1) + ggtitle(NULL)
+
+# Endothelial Cells
+# Plot size (WxH): 1200 x 430
+netAnalysis_signalingChanges_scatter(lung_merge_cc, idents.use = "ECs", comparison = c(1, 2)) + 
+  theme(legend.position = "none", 
+        axis.text = element_text(size = 12, color = "black"), 
+        axis.title.y = element_text(size = 15, color = "black"), axis.title.x = element_blank()) + 
+  xlim(-0.1, 2) + ylim(-0.1, 0.3) + ggtitle(NULL) + 
+  netAnalysis_signalingChanges_scatter(lung_merge_cc, idents.use = "ECs", comparison = c(2, 3)) + 
+  theme(legend.position = "none", 
+        axis.text = element_text(size = 12, color = "black"), 
+        axis.title.x = element_text(size = 15, color = "black"), axis.title.y = element_blank()) + 
+  xlim(-0.1, 0.8) + ylim(-0.1, 0.7) + ggtitle(NULL) + 
+  netAnalysis_signalingChanges_scatter(lung_merge_cc, idents.use = "ECs", comparison = c(3, 4)) + 
+  theme(legend.position = "none", 
+        axis.text = element_text(size = 12, color = "black"), 
+        axis.title = element_blank()) + 
+  xlim(-1, 0.1) + ylim(-0.65, 0.1) + ggtitle(NULL)
+```
+
+### Figure 4E
+```{r, warning=FALSE, message=FALSE}
+
+plot_list <- list()
+
+# COLLAGEN Signaling
+for (i in 1:4){
+  plot_list[[i]] <- netVisual_heatmap(lungcc_object.list[[i]], signaling = "COLLAGEN", color.heatmap = "Reds",
+                        title = names(lungcc_object.list)[i], font.size = 13, font.size.title = 0)
+}
+
+# Plot size (WxH): 1000 x 250
+plot_list[[1]] + plot_list[[2]] + plot_list[[3]] + plot_list[[4]]
+
+plot_list <- list()
+# Fibronectin (FN1) Signaling
+for (i in 1:4){
+  plot_list[[i]] <- netVisual_heatmap(lungcc_object.list[[i]], signaling = "FN1", color.heatmap = "Reds",
+                        title = names(lungcc_object.list)[i], font.size = 13, font.size.title = 0)
+}
+
+# Plot size (WxH): 1000 x 250
+plot_list[[1]] + plot_list[[2]] + plot_list[[3]] + plot_list[[4]]
+
+
+rm(plot_list, i)
+```
+
+### Figure 4F
+```{r, warning=FALSE, message=FALSE}
+pairLR.use <- extractEnrichedLR(lung_merge_cc, signaling = c("COLLAGEN", "LAMININ", "FN1"))
+
+# Plot size (WxH): 450 x 350
+netVisual_bubble(lung_merge_cc, sources.use = c(2, 12, 13), targets.use = "Neutrophils",  comparison = c(1:4), max.dataset = 2,
+                 title.name = "", angle.x = 45, remove.isolate = T, pairLR.use = pairLR.use) +
+  theme(legend.position = "none", 
+        axis.text.x = element_blank(), axis.text.y = element_text(size = 15, colour = "black"), 
+        panel.border = element_rect(color = "black", fill = NA, size = 3))
+
+rm(pairLR.use)
 ```
 
 

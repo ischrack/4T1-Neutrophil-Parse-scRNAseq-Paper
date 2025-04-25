@@ -1097,6 +1097,21 @@ for (i in 1:4){
 cowplot::plot_grid(plot_list[[1]], plot_list[[2]], plot_list[[3]], plot_list[[4]], align = "h", ncol = 4)
 
 rm(num.link, weight.MinMax, plot_list)
+
+# Lung differential interactions heatmap for the following: 
+# Day 7 vs. Day 0
+# Day 14 vs. Day 7
+# Day 21 vs. Day 14
+plot_list <- list()
+for (i in 1:3){
+  plot_list[[i]] <- netVisual_heatmap(scaf_merge_cc, measure = "weight", 
+                                      sources.use = c(1:6, 10:13), targets.use = c(1:6, 10:13), 
+                                      remove.isolate = T, comparison = c(i, i+1), 
+                                      font.size = 13, font.size.title = 0)
+}
+
+draw(plot_list[[1]]+plot_list[[2]]+plot_list[[3]])
+rm(plot_list)
 ```
 
 ```{r Scaffold Cellchat plotting, warning=FALSE, message=FALSE}
@@ -1135,6 +1150,22 @@ for (i in 1:4){
 cowplot::plot_grid(plot_list[[1]], plot_list[[2]], plot_list[[3]], plot_list[[4]], align = "h", ncol = 4)
 
 rm(num.link, weight.MinMax, plot_list)
+
+# Scaffold differential interactions heatmap for the following: 
+# Day 7 vs. Day 0
+# Day 14 vs. Day 7
+# Day 21 vs. Day 14
+plot_list <- list()
+for (i in 1:3){
+  plot_list[[i]] <- netVisual_heatmap(scaf_merge_cc, measure = "weight", 
+                                      sources.use = c(1:6, 10:13), targets.use = c(1:6, 10:13), 
+                                      remove.isolate = T, comparison = c(i, i+1), 
+                                      font.size = 13, font.size.title = 0)
+}
+
+draw(plot_list[[1]]+plot_list[[2]]+plot_list[[3]])
+rm(plot_list)
+
 ```
 
 
@@ -1558,6 +1589,127 @@ ggplot(temp2, aes(x = CellType, y = Percent, fill = Tissue)) +
 
 # Clean up temporary objects.
 rm(t1, t2, t3, t4, temp1, temp2)
+```
+
+
+#### Figure 4A
+```{r}
+weight.max <- getMaxWeight(lungcc_object.list, attribute = c("idents","count"))
+
+# Plot size (WxH): 1400 x 700
+par(mfrow = c(1,4), xpd=TRUE)
+for (i in 1:4) {
+  netVisual_circle(lungcc_object.list[[i]]@net$count, 
+                 weight.scale = T, label.edge= F, edge.weight.max = weight.max[2], 
+                 edge.width.max = 10, arrow.size = 0.05, 
+                 title.name = paste0(""))
+}
+par(mfrow = c(1,1), xpd=TRUE)
+
+rm(weight.max)
+
+
+```
+
+#### Figure 4B
+```{r}
+# Compare the major sources and targets
+num.link <- sapply(lungcc_object.list, function(x) {rowSums(x@net$count) + colSums(x@net$count)-diag(x@net$count)})
+weight.MinMax <- c(min(num.link), max(num.link)) # control the dot size in the different datasets
+
+plot_list <- list()
+
+for (i in 1:2){
+  plot_list[[i]] <- netAnalysis_signalingRole_scatter(lungcc_object.list[[i]], weight.MinMax = weight.MinMax) + 
+    theme(axis.line = element_line(color = "black", size = 2), 
+          axis.text = element_text(color = "black", size = 12), 
+          axis.title = element_text(color = "black", size = 12, face = "bold"), 
+          plot.margin = unit(c(0.5, 0.5, 0.5, 0.5), "cm"), 
+          legend.position = "none") + 
+  ylim(0, 5) + xlim(0, 15)
+}
+
+# Plot size (WxH): 1200 x 350
+cowplot::plot_grid(plot_list[[1]], plot_list[[2]], align = "h", ncol = 2)
+
+# 
+d0_temp <- plot_list[[1]]$data
+d0_temp <- subset(d0_temp, subset = labels %in% c("Fibroblasts", "ECs"))
+names(d0_temp)[names(d0_temp) == 'x'] <- 'outgoing'
+names(d0_temp)[names(d0_temp) == 'y'] <- 'incoming'
+d0_temp$Day <- "D0"
+
+d7_temp <- plot_list[[2]]$data
+d7_temp <- subset(d7_temp, subset = labels %in% c("Fibroblasts", "ECs"))
+names(d7_temp)[names(d7_temp) == 'x'] <- 'outgoing'
+names(d7_temp)[names(d7_temp) == 'y'] <- 'incoming'
+d7_temp$Day <- "D7"
+
+combined_df <- rbind(d0_temp, d7_temp)
+
+# Outgoing plots
+p1 <- ggplot(subset(combined_df, subset = labels == "Fibroblasts"), aes(y = outgoing, x = Day)) + 
+  geom_bar(stat = "identity", position = "dodge", colour = "black", fill = "#E3BE00") + 
+  theme(text = element_text(size = 20, colour = "black"),
+        axis.text.x = element_text(size = 20, colour = "black"),
+        axis.text.y = element_text(size = 20, colour = "black"),
+        axis.line.x = element_line(size = 1, colour = "black", linetype=1),
+        axis.ticks.x = element_blank(),
+        axis.line.y = element_line(size = 1, colour = "black", linetype=1),
+        axis.ticks.length.y = unit(0.25, "cm"),
+        axis.ticks.y = element_line(size = 1, colour = "black"),
+        plot.background = element_rect(fill = "transparent", colour = NA_character_), 
+        panel.background = element_rect(fill = "transparent", colour = NA_character_)) + 
+  labs(y = "Outgoing Interaction Strength", title = "Fibroblasts") + ylim(0, 10)
+
+p2 <- ggplot(subset(combined_df, subset = labels == "ECs"), aes(y = outgoing, x = Day)) + 
+  geom_bar(stat = "identity", position = "dodge", colour = "black", fill = "#B2DF8A") + 
+  theme(text = element_text(size = 20, colour = "black"),
+        axis.text.x = element_text(size = 20, colour = "black"),
+        axis.text.y = element_text(size = 20, colour = "black"),
+        axis.line.x = element_line(size = 1, colour = "black", linetype=1),
+        axis.ticks.x = element_blank(),
+        axis.line.y = element_line(size = 1, colour = "black", linetype=1),
+        axis.ticks.length.y = unit(0.25, "cm"),
+        axis.ticks.y = element_line(size = 1, colour = "black"),
+        plot.background = element_rect(fill = "transparent", colour = NA_character_), 
+        panel.background = element_rect(fill = "transparent", colour = NA_character_)) + 
+  labs(y = "", title = "ECs") + ylim(0, 10)
+
+cowplot::plot_grid(p1, p2, align = "h", ncol = 2)
+
+# Incoming plots
+p1 <- ggplot(subset(combined_df, subset = labels == "Fibroblasts"), aes(y = incoming, x = Day)) + 
+  geom_bar(stat = "identity", position = "dodge", colour = "black", fill = "#E3BE00") + 
+  theme(text = element_text(size = 20, colour = "black"),
+        axis.text.x = element_text(size = 20, colour = "black"),
+        axis.text.y = element_text(size = 20, colour = "black"),
+        axis.line.x = element_line(size = 1, colour = "black", linetype=1),
+        axis.ticks.x = element_blank(),
+        axis.line.y = element_line(size = 1, colour = "black", linetype=1),
+        axis.ticks.length.y = unit(0.25, "cm"),
+        axis.ticks.y = element_line(size = 1, colour = "black"),
+        plot.background = element_rect(fill = "transparent", colour = NA_character_), 
+        panel.background = element_rect(fill = "transparent", colour = NA_character_)) + 
+  labs(y = "Incoming Interaction Strength", title = "Fibroblasts") + ylim(0, 2.5)
+
+p2 <- ggplot(subset(combined_df, subset = labels == "ECs"), aes(y = incoming, x = Day)) + 
+  geom_bar(stat = "identity", position = "dodge", colour = "black", fill = "#B2DF8A") + 
+  theme(text = element_text(size = 20, colour = "black"),
+        axis.text.x = element_text(size = 20, colour = "black"),
+        axis.text.y = element_text(size = 20, colour = "black"),
+        axis.line.x = element_line(size = 1, colour = "black", linetype=1),
+        axis.ticks.x = element_blank(),
+        axis.line.y = element_line(size = 1, colour = "black", linetype=1),
+        axis.ticks.length.y = unit(0.25, "cm"),
+        axis.ticks.y = element_line(size = 1, colour = "black"),
+        plot.background = element_rect(fill = "transparent", colour = NA_character_), 
+        panel.background = element_rect(fill = "transparent", colour = NA_character_)) + 
+  labs(y = "", title = "ECs") + ylim(0, 2.5)
+
+cowplot::plot_grid(p1, p2, align = "h", ncol = 2)
+
+rm(num.link, weight.MinMax, plot_list, i, d0_temp, d7_temp, combined_df, p1, p2)
 ```
 
 

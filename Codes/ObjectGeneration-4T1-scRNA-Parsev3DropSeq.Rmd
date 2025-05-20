@@ -1,0 +1,587 @@
+---
+title: "Parse v3 Object Generation"
+author: "Ian Schrack"
+date: "2025-05-20"
+output: html_document
+---
+
+```{r Clear variable list}
+# Clear all variables from the workspace to prevent conflicts with old objects.
+rm(list = ls())
+
+# Set the seed for consistency
+set.seed(42); 
+```
+
+## Part I: Import & load necessary libraries and data
+```{r Load libraries, include = FALSE}
+library(Seurat)
+```
+
+# Prepare the Parse Biosciences Dataset
+```{r Load data & create a Seurat Object, echo=FALSE, warning=FALSE}
+# Open & read the Parse file
+# mat_path <- "/Users/ianschrack/Desktop/10882-IS/DGE_filtered"
+mat_path <- "/Users/ianschrack/Desktop/parse_analysis_10882-IS/all-sample/DGE_filtered/"
+mat <- ReadParseBio(data.dir = mat_path)
+
+# Check to see if empty gene names are present, add name if so.
+table(rownames(mat) == "")
+rownames(mat)[rownames(mat) == ""] <- "unknown"
+
+# Read in cell meta data
+cell_meta <- read.csv(paste0(mat_path, "/cell_metadata.csv"), row.names = 1)
+
+# Create object (following Seurat pipeline not Parse)
+AllTissue <- CreateSeuratObject(mat, min.features =  200, min.cells = 3, names.field = 0, meta.data = cell_meta)
+
+# Setting our initial cell class to a single type, this will changer after clustering. 
+AllTissue@meta.data$orig.ident <- factor(rep("AllTissue", nrow(AllTissue@meta.data)))
+Idents(AllTissue) <- AllTissue@meta.data$orig.ident
+
+# Insert identifying meta data
+# Timepoint & tissue information
+# "10882-IS-1" to "10882-IS-4" is D0 Lung
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-1"] <- "D0"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-1"] <- "Lung"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-1"] <- "R1"
+
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-2"] <- "D0"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-2"] <- "Lung"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-2"] <- "R2"
+
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-3"] <- "D0"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-3"] <- "Lung"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-3"] <- "R3"
+
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-4"] <- "D0"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-4"] <- "Lung"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-4"] <- "R4"
+
+# "10882-IS-5" to "10882-IS-8" is D0 Scaffold
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-5"] <- "D0"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-5"] <- "Scaffold"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-5"] <- "R1"
+
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-6"] <- "D0"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-6"] <- "Scaffold"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-6"] <- "R2"
+
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-7"] <- "D0"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-7"] <- "Scaffold"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-7"] <- "R3"
+
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-8"] <- "D0"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-8"] <- "Scaffold"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-8"] <- "R4"
+
+# "10882-IS-9" to "10882-IS-12" is D0 Blood
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-9"] <- "D0"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-9"] <- "Blood"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-9"] <- "R1"
+
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-10"] <- "D0"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-10"] <- "Blood"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-10"] <- "R2"
+
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-11"] <- "D0"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-11"] <- "Blood"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-11"] <- "R3"
+
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-12"] <- "D0"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-12"] <- "Blood"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-12"] <- "R4"
+
+# "10882-IS-13" to "10882-IS-16" is D7 Lung
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-13"] <- "D7"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-13"] <- "Lung"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-13"] <- "R1"
+
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-14"] <- "D7"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-14"] <- "Lung"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-14"] <- "R2"
+
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-15"] <- "D7"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-15"] <- "Lung"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-15"] <- "R3"
+
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-16"] <- "D7"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-16"] <- "Lung"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-16"] <- "R4"
+
+# "10882-IS-17" to "10882-IS-20" is D7 Scaffold
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-17"] <- "D7"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-17"] <- "Scaffold"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-17"] <- "R1"
+
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-18"] <- "D7"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-18"] <- "Scaffold"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-18"] <- "R2"
+
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-19"] <- "D7"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-19"] <- "Scaffold"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-19"] <- "R3"
+
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-20"] <- "D7"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-20"] <- "Scaffold"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-20"] <- "R4"
+
+# "10882-IS-21" to "10882-IS-24" is D7 Blood
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-21"] <- "D7"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-21"] <- "Blood"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-21"] <- "R1"
+
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-22"] <- "D7"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-22"] <- "Blood"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-22"] <- "R2"
+
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-23"] <- "D7"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-23"] <- "Blood"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-23"] <- "R3"
+
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-24"] <- "D7"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-24"] <- "Blood"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-24"] <- "R4"
+
+# "10882-IS-25" to "10882-IS-28" is D14 Lung
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-25"] <- "D14"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-25"] <- "Lung"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-25"] <- "R1"
+
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-26"] <- "D14"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-26"] <- "Lung"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-26"] <- "R2"
+
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-27"] <- "D14"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-27"] <- "Lung"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-27"] <- "R3"
+
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-28"] <- "D14"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-28"] <- "Lung"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-28"] <- "R4"
+
+# "10882-IS-29" to "10882-IS-32" is D14 Scaffold
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-29"] <- "D14"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-29"] <- "Scaffold"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-29"] <- "R1"
+
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-30"] <- "D14"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-30"] <- "Scaffold"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-30"] <- "R2"
+
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-31"] <- "D14"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-31"] <- "Scaffold"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-31"] <- "R3"
+
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-32"] <- "D14"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-32"] <- "Scaffold"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-32"] <- "R4"
+
+# "10882-IS-33" to "10882-IS-36" is D14 Blood
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-33"] <- "D14"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-33"] <- "Blood"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-33"] <- "R1"
+
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-34"] <- "D14"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-34"] <- "Blood"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-34"] <- "R2"
+
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-35"] <- "D14"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-35"] <- "Blood"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-35"] <- "R3"
+
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-36"] <- "D14"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-36"] <- "Blood"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-36"] <- "R4"
+
+# "10882-IS-37" to "10882-IS-40" is D21 Lung
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-37"] <- "D21"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-37"] <- "Lung"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-37"] <- "R1"
+
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-38"] <- "D21"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-38"] <- "Lung"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-38"] <- "R2"
+
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-39"] <- "D21"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-39"] <- "Lung"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-39"] <- "R3"
+
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-40"] <- "D21"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-40"] <- "Lung"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-40"] <- "R4"
+
+# "10882-IS-41" to "10882-IS-44" is D21 Scaffold
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-41"] <- "D21"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-41"] <- "Scaffold"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-41"] <- "R1"
+
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-42"] <- "D21"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-42"] <- "Scaffold"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-42"] <- "R2"
+
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-43"] <- "D21"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-43"] <- "Scaffold"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-43"] <- "R3"
+
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-44"] <- "D21"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-44"] <- "Scaffold"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-44"] <- "R4"
+
+# "10882-IS-45" to "10882-IS-48" is D21 Blood
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-45"] <- "D21"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-45"] <- "Blood"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-45"] <- "R1"
+
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-46"] <- "D21"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-46"] <- "Blood"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-46"] <- "R2"
+
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-47"] <- "D21"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-47"] <- "Blood"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-47"] <- "R3"
+
+AllTissue@meta.data$Day[AllTissue@meta.data$sample == "10882-IS-48"] <- "D21"
+AllTissue@meta.data$Tissue[AllTissue@meta.data$sample == "10882-IS-48"] <- "Blood"
+AllTissue@meta.data$Replicate[AllTissue@meta.data$sample == "10882-IS-48"] <- "R4"
+
+rm(cell_meta, mat, mat_path)
+```
+
+
+```{r Check Quality, warning=FALSE, message=FALSE}
+AllTissue[["percent.mt"]] <- PercentageFeatureSet(AllTissue, pattern = "^mt-")
+
+# Pre-Filtering
+VlnPlot(AllTissue, pt.size = 0, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+FeatureScatter(AllTissue, feature1 = "nCount_RNA", feature2 = "percent.mt")
+FeatureScatter(AllTissue, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+
+```
+
+```{r Initial cell count by tissue, day, and replicate}
+print("All Tissues")
+addmargins(table(AllTissue$Replicate, AllTissue$Day))
+
+print("Lung Pre-Filter")
+temp <- subset(AllTissue, subset = Tissue == "Lung")
+addmargins(table(temp@meta.data$Replicate, temp@meta.data$Day))
+
+print("Scaffold Pre-Filter")
+temp <- subset(AllTissue, subset = Tissue == "Scaffold")
+addmargins(table(temp@meta.data$Replicate, temp@meta.data$Day))
+
+print("Blood Pre-Filter")
+temp <- subset(AllTissue, subset = Tissue == "Blood")
+addmargins(table(temp@meta.data$Replicate, temp@meta.data$Day))
+
+rm(temp)
+```
+
+```{r Subset cells}
+AllTissue <- subset(AllTissue, subset = nFeature_RNA < 5000 & nCount_RNA < 20000 & percent.mt < 15)
+```
+
+```{r Cell count by tissue, day, and replicate after filtering}
+print("All Tissues")
+addmargins(table(AllTissue$Replicate, AllTissue$Day))
+
+print("Lung Pre-Filter")
+temp <- subset(AllTissue, subset = Tissue == "Lung")
+addmargins(table(temp@meta.data$Replicate, temp@meta.data$Day))
+
+print("Scaffold Pre-Filter")
+temp <- subset(AllTissue, subset = Tissue == "Scaffold")
+addmargins(table(temp@meta.data$Replicate, temp@meta.data$Day))
+
+print("Blood Pre-Filter")
+temp <- subset(AllTissue, subset = Tissue == "Blood")
+addmargins(table(temp@meta.data$Replicate, temp@meta.data$Day))
+
+rm(temp)
+```
+
+```{r Normalize and cluster, warning=FALSE, message=FALSE}
+# Split data by tissue type for future integration
+AllTissue[["RNA"]] <- split(AllTissue[["RNA"]], f = AllTissue$Tissue)
+
+# Normalized using default parameters
+AllTissue <- NormalizeData(AllTissue, normalization.method = "LogNormalize", scale.factor = 10000)
+
+#Run PCA and tSNE on the data
+AllTissue <- FindVariableFeatures(AllTissue, selection.method = "vst", nfeatures = 2000)
+AllTissue <- ScaleData(AllTissue)
+AllTissue <- RunPCA(AllTissue)
+ElbowPlot(AllTissue, ndims = 50) # Determine Dimensionality
+
+AllTissue <- FindNeighbors(AllTissue, dims = 1:40)
+AllTissue <- FindClusters(AllTissue, resolution = 0.5, cluster.name  = "unintegrated_clusters")
+AllTissue <- RunUMAP(AllTissue, dims = 1:40, reduction.name = "umap.unintegrated")
+DimPlot(AllTissue)
+```
+
+
+
+# Prepare DropSeq Dataset
+# This follows the pipeline described by Orbach et al, 2023
+```{r, warning=FALSE, include=FALSE}
+data_path = "/Users/ianschrack/Desktop/10882-IS/Sophia_scRNA/geo_sub_4T1scRNAseq_LungScaffoldSpleen_d0d7d14d21_DropSeq/"
+
+#Input files from count matrix
+scaf.h.d7.data <- read.table(paste(data_path, "scaf.h.d7.txt", sep=""), header = TRUE, row.names = 1, sep = "\t", as.is = TRUE)
+scaf.d.d7.data <- read.table(paste(data_path, "scaf.d.d7.txt", sep=""), header = TRUE, row.names = 1, sep = "\t", as.is = TRUE)
+scaf.h.d14.data <- read.table(paste(data_path, "scaf.h.d14.txt", sep=""), header = TRUE, row.names = 1, sep = "\t", as.is = TRUE)
+scaf.d.d14.data <- read.table(paste(data_path, "scaf.d.d14.txt", sep=""), header = TRUE, row.names = 1, sep = "\t", as.is = TRUE)
+scaf.h.d21.data <- read.table(paste(data_path, "scaf.h.d21.txt", sep=""), header = TRUE, row.names = 1, sep = "\t", as.is = TRUE)
+scaf.d.d21.data <- read.table(paste(data_path, "scaf.d.d21.txt", sep=""), header = TRUE, row.names = 1, sep = "\t", as.is = TRUE)
+
+lung.h.d7.data <- read.table(paste(data_path, "lung.h.d7.txt", sep=""), header = TRUE, row.names = 1, sep = "\t", as.is = TRUE)
+lung.d.d7.data <- read.table(paste(data_path, "lung.d.d7.txt", sep=""), header = TRUE, row.names = 1, sep = "\t", as.is = TRUE)
+lung.h.d14.data <- read.table(paste(data_path, "lung.h.d14.txt", sep=""), header = TRUE, row.names = 1, sep = "\t", as.is = TRUE)
+lung.d.d14.data <- read.table(paste(data_path, "lung.d.d14.txt", sep=""), header = TRUE, row.names = 1, sep = "\t", as.is = TRUE)
+lung.h.d21.data <- read.table(paste(data_path, "lung.h.d21.txt", sep=""), header = TRUE, row.names = 1, sep = "\t", as.is = TRUE)
+lung.d.d21.data <- read.table(paste(data_path, "lung.d.d21.txt", sep=""), header = TRUE, row.names = 1, sep = "\t", as.is = TRUE)
+
+spleen.h.d7.data <- read.table(paste(data_path, "spleen.h.d7.txt", sep=""), header = TRUE, row.names = 1, sep = "\t", as.is = TRUE)
+spleen.d.d7.data <- read.table(paste(data_path, "spleen.d.d7.txt", sep=""), header = TRUE, row.names = 1, sep = "\t", as.is = TRUE)
+spleen.h.d14.data <- read.table(paste(data_path, "spleen.h.d14.txt", sep=""), header = TRUE, row.names = 1, sep = "\t", as.is = TRUE)
+spleen.d.d14.data <- read.table(paste(data_path, "spleen.d.d14.txt", sep=""), header = TRUE, row.names = 1, sep = "\t", as.is = TRUE)
+spleen.h.d21.data <- read.table(paste(data_path, "spleen.h.d21.txt", sep=""), header = TRUE, row.names = 1, sep = "\t", as.is = TRUE)
+spleen.d.d21.data <- read.table(paste(data_path, "spleen.d.d21.txt", sep=""), header = TRUE, row.names = 1, sep = "\t", as.is = TRUE)
+
+#Create Seurat objects
+#Create individual objects, only include genes that are present in at least 3 cells and label identifying features
+scaf.h.d7 <- CreateSeuratObject(scaf.h.d7.data, min.cells = 3)
+scaf.h.d7@meta.data$sample <- "scaf.h.d7"
+scaf.h.d7@meta.data$Tissue <- 'scaffold'
+scaf.h.d7@meta.data$Experiment <- 'D7'
+scaf.h.d7@meta.data$Time <- 0
+scaf.h.d7 <- NormalizeData(scaf.h.d7)
+scaf.h.d7 <- ScaleData(scaf.h.d7)
+
+scaf.d.d7 <- CreateSeuratObject(scaf.d.d7.data, min.cells = 3)
+scaf.d.d7@meta.data$sample <- "scaf.d.d7"
+scaf.d.d7@meta.data$Tissue <- 'scaffold'
+scaf.d.d7@meta.data$Experiment <- 'D7'
+scaf.d.d7@meta.data$Time <- 7
+scaf.d.d7 <- NormalizeData(scaf.d.d7)
+scaf.d.d7 <- ScaleData(scaf.d.d7)
+
+scaf.h.d14 <- CreateSeuratObject(scaf.h.d14.data, min.cells = 3)
+scaf.h.d14@meta.data$sample <- "scaf.h.d14"
+scaf.h.d14@meta.data$Tissue <- 'scaffold'
+scaf.h.d14@meta.data$Experiment <- 'D14'
+scaf.h.d14@meta.data$Time <- 0
+scaf.h.d14 <- NormalizeData(scaf.h.d14)
+scaf.h.d14 <- ScaleData(scaf.h.d14)
+
+scaf.d.d14 <- CreateSeuratObject(scaf.d.d14.data, min.cells = 3)
+scaf.d.d14@meta.data$sample <- "scaf.d.d14"
+scaf.d.d14@meta.data$Tissue <- 'scaffold'
+scaf.d.d14@meta.data$Experiment <- 'D14'
+scaf.d.d14@meta.data$Time <- 14
+scaf.d.d14 <- NormalizeData(scaf.d.d14)
+scaf.d.d14 <- ScaleData(scaf.d.d14)
+
+scaf.h.d21 <- CreateSeuratObject(scaf.h.d21.data, min.cells = 3)
+scaf.h.d21@meta.data$sample <- "scaf.h.d21"
+scaf.h.d21@meta.data$Tissue <- 'scaffold'
+scaf.h.d21@meta.data$Experiment <- 'D21'
+scaf.h.d21@meta.data$Time <- 0
+scaf.h.d21 <- NormalizeData(scaf.h.d21)
+scaf.h.d21 <- ScaleData(scaf.h.d21)
+
+scaf.d.d21 <- CreateSeuratObject(scaf.d.d21.data, min.cells = 3)
+scaf.d.d21@meta.data$sample <- "scaf.d.d21"
+scaf.d.d21@meta.data$Tissue <- 'scaffold'
+scaf.d.d21@meta.data$Experiment <- 'D21'
+scaf.d.d21@meta.data$Time <- 21
+scaf.d.d21 <- NormalizeData(scaf.d.d21)
+scaf.d.d21 <- ScaleData(scaf.d.d21)
+
+lung.h.d7 <- CreateSeuratObject(lung.h.d7.data, min.cells = 3)
+lung.h.d7@meta.data$sample <- "lung.h.d7"
+lung.h.d7@meta.data$Tissue <- 'lung'
+lung.h.d7@meta.data$Experiment <- 'D7'
+lung.h.d7@meta.data$Time <- 0
+lung.h.d7 <- NormalizeData(lung.h.d7)
+lung.h.d7 <- ScaleData(lung.h.d7)
+
+lung.d.d7 <- CreateSeuratObject(lung.d.d7.data, min.cells = 3)
+lung.d.d7@meta.data$sample <- "lung.d.d7"
+lung.d.d7@meta.data$Tissue <- 'lung'
+lung.d.d7@meta.data$Experiment <- 'D7'
+lung.d.d7@meta.data$Time <- 7
+lung.d.d7 <- NormalizeData(lung.d.d7)
+lung.d.d7 <- ScaleData(lung.d.d7)
+
+lung.h.d14 <- CreateSeuratObject(lung.h.d14.data, min.cells = 3)
+lung.h.d14@meta.data$sample <- "lung.h.d14"
+lung.h.d14@meta.data$Tissue <- 'lung'
+lung.h.d14@meta.data$Experiment <- 'D14'
+lung.h.d14@meta.data$Time <- 0
+lung.h.d14 <- NormalizeData(lung.h.d14)
+lung.h.d14 <- ScaleData(lung.h.d14)
+
+lung.d.d14 <- CreateSeuratObject(lung.d.d14.data, min.cells = 3)
+lung.d.d14@meta.data$sample <- "lung.d.d14"
+lung.d.d14@meta.data$Tissue <- 'lung'
+lung.d.d14@meta.data$Experiment <- 'D14'
+lung.d.d14@meta.data$Time <- 14
+lung.d.d14 <- NormalizeData(lung.d.d14)
+lung.d.d14 <- ScaleData(lung.d.d14)
+
+lung.h.d21 <- CreateSeuratObject(lung.h.d21.data, min.cells = 3)
+lung.h.d21@meta.data$sample <- "lung.h.d21"
+lung.h.d21@meta.data$Tissue <- 'lung'
+lung.h.d21@meta.data$Experiment <- 'D21'
+lung.h.d21@meta.data$Time <- 0
+lung.h.d21 <- NormalizeData(lung.h.d21)
+lung.h.d21 <- ScaleData(lung.h.d21)
+
+lung.d.d21 <- CreateSeuratObject(lung.d.d21.data, min.cells = 3)
+lung.d.d21@meta.data$sample <- "lung.d.d21"
+lung.d.d21@meta.data$Tissue <- 'lung'
+lung.d.d21@meta.data$Experiment <- 'D21'
+lung.d.d21@meta.data$Time <- 21
+lung.d.d21 <- NormalizeData(lung.d.d21)
+lung.d.d21 <- ScaleData(lung.d.d21)
+
+spleen.h.d7 <- CreateSeuratObject(spleen.h.d7.data, min.cells = 3)
+spleen.h.d7@meta.data$sample <- "spleen.h.d7"
+spleen.h.d7@meta.data$Tissue <- 'spleen'
+spleen.h.d7@meta.data$Experiment <- 'D7'
+spleen.h.d7@meta.data$Time <- 0
+spleen.h.d7 <- NormalizeData(spleen.h.d7)
+spleen.h.d7 <- ScaleData(spleen.h.d7)
+
+spleen.d.d7 <- CreateSeuratObject(spleen.d.d7.data, min.cells = 3)
+spleen.d.d7@meta.data$sample <- "spleen.d.d7"
+spleen.d.d7@meta.data$Tissue <- 'spleen'
+spleen.d.d7@meta.data$Experiment <- 'D7'
+spleen.d.d7@meta.data$Time <- 7
+spleen.d.d7 <- NormalizeData(spleen.d.d7)
+spleen.d.d7 <- ScaleData(spleen.d.d7)
+
+spleen.h.d14 <- CreateSeuratObject(spleen.h.d14.data, min.cells = 3)
+spleen.h.d14@meta.data$sample <- "spleen.h.d14"
+spleen.h.d14@meta.data$Tissue <- 'spleen'
+spleen.h.d14@meta.data$Experiment <- 'D14'
+spleen.h.d14@meta.data$Time <- 0
+spleen.h.d14 <- NormalizeData(spleen.h.d14)
+spleen.h.d14 <- ScaleData(spleen.h.d14)
+
+spleen.d.d14 <- CreateSeuratObject(spleen.d.d14.data, min.cells = 3)
+spleen.d.d14@meta.data$sample <- "spleen.d.d14"
+spleen.d.d14@meta.data$Tissue <- 'spleen'
+spleen.d.d14@meta.data$Experiment <- 'D14'
+spleen.d.d14@meta.data$Time <- 14
+spleen.d.d14 <- NormalizeData(spleen.d.d14)
+spleen.d.d14 <- ScaleData(spleen.d.d14)
+
+spleen.h.d21 <- CreateSeuratObject(spleen.h.d21.data, min.cells = 3)
+spleen.h.d21@meta.data$sample <- "spleen.h.d21"
+spleen.h.d21@meta.data$Tissue <- 'spleen'
+spleen.h.d21@meta.data$Experiment <- 'D21'
+spleen.h.d21@meta.data$Time <- 0
+spleen.h.d21 <- NormalizeData(spleen.h.d21)
+spleen.h.d21 <- ScaleData(spleen.h.d21)
+
+spleen.d.d21 <- CreateSeuratObject(spleen.d.d21.data, min.cells = 3)
+spleen.d.d21@meta.data$sample <- "spleen.d.d21"
+spleen.d.d21@meta.data$Tissue <- 'spleen'
+spleen.d.d21@meta.data$Experiment <- 'D21'
+spleen.d.d21@meta.data$Time <- 21
+spleen.d.d21 <- NormalizeData(spleen.d.d21)
+spleen.d.d21 <- ScaleData(spleen.d.d21)
+
+rm(data_path, 
+   scaf.h.d7.data, scaf.d.d7.data, scaf.h.d14.data, scaf.d.d14.data, scaf.h.d21.data, scaf.d.d21.data, 
+   lung.h.d7.data, lung.d.d7.data, lung.h.d14.data, lung.d.d14.data, lung.h.d21.data, lung.d.d21.data, 
+   spleen.h.d7.data, spleen.d.d7.data, spleen.h.d14.data, spleen.d.d14.data, spleen.h.d21.data, spleen.d.d21.data)
+```
+
+```{r Merge scaffold objects, warning=FALSE, message=FALSE}
+#Merge and filter!
+scaf <- merge(x = scaf.h.d7, y = c(scaf.d.d7, scaf.h.d14, scaf.d.d14, scaf.h.d21, scaf.d.d21), 
+             add.cell.ids = c('scaf.h.d7', 'scaf.d.d7', 'scaf.h.d14', 'scaf.d.d14', 'scaf.h.d21', 'scaf.d.d21'), 
+             merge.data = T)
+
+scaf <- PercentageFeatureSet(scaf, pattern = "^mt-", col.name = "percent.mt")
+VlnPlot(scaf, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+scaf <- subset(scaf, subset = nFeature_RNA > 200 & nFeature_RNA < 2500 & percent.mt < 25 & nCount_RNA < 10000)
+scaf <- NormalizeData(scaf)
+
+#Run PCA and tSNE on the data
+scaf <- FindVariableFeatures(scaf)
+scaf <- ScaleData(scaf)
+scaf <- RunPCA(scaf, verbose = F)
+ElbowPlot(scaf)
+
+scaf <- FindNeighbors(scaf, dims = 1:14)
+scaf <- FindClusters(scaf, resolution = 0.6)
+scaf <- RunUMAP(scaf, dims = 1:14, verbose = F)
+DimPlot(scaf)
+
+rm(scaf.h.d7, scaf.d.d7, scaf.h.d14, scaf.d.d14, scaf.h.d21, scaf.d.d21)
+```
+
+```{r Merge lung objects, warning=FALSE, message=FALSE}
+#Merge and filter!
+lung <- merge(x = lung.h.d7, y = c(lung.d.d7, lung.h.d14, lung.d.d14, lung.h.d21, lung.d.d21), 
+             add.cell.ids = c('lung.h.d7', 'lung.d.d7', 'lung.h.d14', 'lung.d.d14', 'lung.h.d21', 'lung.d.d21'), 
+             merge.data = T)
+
+lung <- PercentageFeatureSet(lung, pattern = "^mt-", col.name = "percent.mt")
+VlnPlot(lung, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+lung <- subset(lung, subset = nFeature_RNA > 200 & nFeature_RNA < 2500 & percent.mt < 25 & nCount_RNA < 10000)
+lung <- NormalizeData(lung)
+
+#Run PCA and tSNE on the data
+lung <- FindVariableFeatures(lung)
+lung <- ScaleData(lung)
+lung <- RunPCA(lung, verbose = F)
+ElbowPlot(lung)
+
+lung <- FindNeighbors(lung, dims = 1:14)
+lung <- FindClusters(lung, resolution = 0.6)
+lung <- RunUMAP(lung, dims = 1:14, verbose = F)
+DimPlot(lung)
+
+rm(lung.h.d7, lung.d.d7, lung.h.d14, lung.d.d14, lung.h.d21, lung.d.d21)
+```
+
+```{r Merge spleen objects, warning=FALSE, include=FALSE}
+#Merge and filter!
+spleen <- merge(x = spleen.h.d7, y = c(spleen.d.d7, spleen.h.d14, spleen.d.d14, spleen.h.d21, spleen.d.d21), 
+             add.cell.ids = c('spleen.h.d7', 'spleen.d.d7', 'spleen.h.d14', 'spleen.d.d14', 'spleen.h.d21', 'spleen.d.d21'), 
+             merge.data = T)
+
+spleen <- PercentageFeatureSet(spleen, pattern = "^mt-", col.name = "percent.mt")
+VlnPlot(spleen, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+spleen <- subset(spleen, subset = nFeature_RNA > 200 & nFeature_RNA < 2500 & percent.mt < 25 & nCount_RNA < 10000)
+spleen <- NormalizeData(spleen)
+
+#Run PCA and tSNE on the data
+spleen <- FindVariableFeatures(spleen)
+spleen <- ScaleData(spleen)
+spleen <- RunPCA(spleen, verbose = F)
+ElbowPlot(spleen)
+
+spleen <- FindNeighbors(spleen, dims = 1:14)
+spleen <- FindClusters(spleen, resolution = 0.6)
+spleen <- RunUMAP(spleen, dims = 1:14, verbose = F)
+DimPlot(spleen)
+
+rm(spleen.h.d7, spleen.d.d7, spleen.h.d14, spleen.d.d14, spleen.h.d21, spleen.d.d21)
+```
+
+```{r}
+# Save the Parse datasets
+# saveRDS(AllTissue, file = "/Users/ianschrack/Desktop/10882-IS/AllTissue_PreAnnot.rds")
+
+# Save the DropSeq datasets
+# saveRDS(spleen, "/Users/ianschrack/Documents/GitHub/4T1-Neutrophil-Parse-scRNAseq-Paper/Data/Spleen_DropSeq.robj")
+# saveRDS(lung, "/Users/ianschrack/Documents/GitHub/4T1-Neutrophil-Parse-scRNAseq-Paper/Data/Lung_DropSeq.robj")
+# saveRDS(scaf, "/Users/ianschrack/Documents/GitHub/4T1-Neutrophil-Parse-scRNAseq-Paper/Data/Scaffold_DropSeq.robj")
+```

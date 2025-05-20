@@ -46,7 +46,7 @@ AllTissue <- merge(AllTissue, y = Dropseq)
 VlnPlot(AllTissue, pt.size = 0, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3, group.by = "dataset")
 
 # Scatter plot: RNA counts vs. mitochondrial percentage.
-FeatureScatter(AllTissue, feature1 = "nCount_RNA", feature2 = "percent.mt")
+FeatureScatter(AllTissue, feature1 = "nCount_RNA", feature2 = "percent.mt", group.by = "dataset")
 
 # Scatter plot: RNA counts vs. number of detected genes.
 FeatureScatter(AllTissue, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
